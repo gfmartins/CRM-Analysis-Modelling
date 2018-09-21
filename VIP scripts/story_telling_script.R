@@ -9,19 +9,17 @@ library(astsa)
 library(forecast)
 library(xts) 
 
-### Import datasets
+########################  Import data ########################  
 
-### Import table with group codes
-
+### Group codes
+## Import table with group codes
 table_group_codes<- read_excel("~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Support Services/nominal ledgers and source groups.xlsx") %>%
   select(-Recnum) %>%
   rename_all(funs(tolower(make.names(.)))) %>%
   rename_all(funs(gsub("_", ".", .)))
 
-
 ### Source codes, group codes
 ## Import table with sources codes and join with group codes
-
 table_source_codes<- read_excel("~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Support Services/all source codes.xlsx",
                                 skip = 1) %>%
   rename_all(funs(tolower(make.names(.)))) %>%
@@ -35,39 +33,41 @@ table_source_codes<- read_excel("~/Google Drive/Data Analysis/Bases de Datos/St.
 
 ### Source codes, group codes, nominal descriptions
 ## Import table with nominal descriptions and join with source/group codes
-
 table_nominal_descriptions <- read_excel("~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Support Services/nominal descriptions.xlsx") %>%
   rename_all(funs(tolower(make.names(.)))) %>% 
   mutate_all(funs(as.factor)) %>%
   left_join(table_source_codes, by = c("nominal.codes" = "nominal.ledger")) 
 
+### Income stream codes
+## Import Income Stream table
+table_income_stream <- read_excel("~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Support Services/income stream.xlsx", 
+                                  skip = 1) %>%
+  rename_all(funs(tolower(make.names(.))))
 
+### Regular donors details
+## Import Regular Givers details
+table_RG_details<- read_excel("~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Support Services/Regular givers detail.xlsx") %>%
+  rename_all(funs(tolower(make.names(.)))) %>%
+  select(-c(start.date, terminated.on)) %>%
+  mutate_at(vars(frequency), funs(as.factor)) 
+
+### Donations
 ## Import main donations dataset
 dataset_donations <- as.tibble(read_excel("~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Support Services/Donations_6Years (nopass).xlsx",
                                           sheet = "Fernando_6year_3.7.18_1")) %>%
   rename_all(funs(tolower(make.names(.)))) %>%
   select(-c(address1))
 
-## Import Income Stream table
-table_income_stream <- read_excel("~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Support Services/income stream.xlsx", 
-                                  skip = 1) %>%
-  rename_all(funs(tolower(make.names(.))))
 
-
-#Import Regular Givers details
-table_RG_details<- read_excel("~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Support Services/Regular givers detail.xlsx") %>%
-  rename_all(funs(tolower(make.names(.)))) %>%
-  select(-c(start.date, terminated.on)) %>%
-  mutate_at(vars(frequency), funs(as.factor)) 
-
-### Source codes, group codes, nominal descriptions, main dataset
-
-# Join main donation dataset with Income Stream and RG
+### Source codes, group codes, income stream, regular givers details, main dataset
+## Join main donation dataset with Income Stream and RG
 dataset_donations<- dataset_donations %>% 
   inner_join(table_income_stream, by ="journal.no") %>%
   left_join(table_RG_details, by = c("donor.no", c("donation.amount" = "instalment.amount"))) 
 
-## Join main donations dataset with source codes, nominal descriptions 
+
+### Source codes, group codes, nominal descriptions, income stream, regular givers details, main dataset
+## Join main donations dataset with Income stream and RG with source codes, group codes, nominal descriptions 
 dataset_donations <- dataset_donations %>%
   mutate(day = strftime(dataset_donations$donation.date, format = "%d")) %>%
   mutate(week = strftime(dataset_donations$donation.date, format = "%V")) %>%
@@ -109,7 +109,7 @@ dataset_donations %>%
   geom_line() +
   geom_smooth(method = "lm") + 
   theme_economist() +
-  labs(title = "St. Cuthbert's Hospice", subtitle = "Time Series of Donations by Source", x = "Date", y = "Log Donations") +
+  labs(title = "St. Cuthbert's Hospice", subtitle = "Time Series of Donations by Source", x = "Date", y = "Donations") +
   theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5), legend.position = "right", plot.title = element_text(size=20), plot.subtitle = element_text(size = 12), text = element_text(family = "Tahoma")) 
 
 
