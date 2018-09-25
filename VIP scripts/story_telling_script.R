@@ -125,7 +125,7 @@ map2<- get_map(Coord.City, zoom = 10, scale = 1)
 
 
 
-################################################################################################################
+######################## Dashboards ########################
 
 # Time series of every source of income, sum of donations weekly
 dataset_donations %>%
@@ -145,19 +145,21 @@ dataset_donations %>%
 income<- "Events"
 
 dataset_donations %>%
-  select(donation.date, development.income, year, week, donation.amount) %>%  
-  group_by(year, week, development.income) %>% 
+  select(donation.date, development.income, year, month, donation.amount) %>%  
+  group_by(year, month, development.income) %>% 
   mutate(Donation = sum(donation.amount)) %>% 
   filter(development.income == income) %>%
-  ggplot(aes(x = donation.date, y = (Donation))) + 
-  geom_line() +
+  ggplot(aes(x = month, y = (Donation), colour = year)) + 
+  geom_line(colour = year) +
   geom_smooth(method = "loess") + 
   theme_economist() +
   labs(title = "St. Cuthbert's Hospice", subtitle = "Time Series of Donations by Source", x = "Date", y = "Donations") +
   theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5), legend.position = "right", plot.title = element_text(size=20), plot.subtitle = element_text(size = 12), text = element_text(family = "Tahoma")) 
 
 
-### ### ### ### ### ### Comparison of RG donations vs others, with projection ### ### ### ### ### ### ### ### 
+######################## RG and digital payments analysis ########################
+
+### Comparison of RG donations vs others, with projection 
 
 # Construct data of regular donors
 
@@ -286,7 +288,7 @@ autoplot(vectorT) +
 for_classifierFull1$mean
 
 
-### ### ### ### ### ### Comparison of number of donators RG vs others, with projection ### ### ### ### ### 
+### Comparison of number of donators RG vs others, with projection
 
 ## Create dataset of regular donors
 dataset_filtered<- dataset_donations %>%  
@@ -393,7 +395,7 @@ for_classifierFull1$mean
 
 
 
-### ### ### ### ### ### ### ### ### Donations by payment type ### ### ### ### ### ### ### ### ### ###
+### Donations by payment type 
 
 # Timeseries of payments by payment type
 
@@ -523,7 +525,7 @@ plot2<- ggmap(map2, base_layer = ggplot(dataset_maps, aes(longitude, latitude)))
 grid.arrange(plot1, plot2, nrow=1, ncol=2)
 
 
-######################## SDD ######################## 
+### SDD
 
 # Analysis of dispersion of payments by year
 ## Digital payments drive expansion of donations across geographical areas?
@@ -743,18 +745,23 @@ ggmap(map, base_layer = ggplot(dataset_maps, aes(longitude, latitude))) +
 
 
 
-### ### ### ### ### ### ### ### ### ### ### Conclutions ### ### ### ### ### ### ### ### ### ### ### ###
+########################## Conclutions ########################## 
 
 # Insights: 
 ## Number of donors: regular givers and online payments have good projections
 ## Amount of donations: random givers and offline payments take the lead 
-
 ## Digital payments outnumber physical payments in number but not amount
+## Events are digitally paid, others are physical. Therefore digital is not driving expansion, but localized promotion.
 
 # Proposal:
-## Make campaign of regular giver online (promote it on events and website, QR code, etc.)
-# (https://www.directdebit.co.uk/Resources/Pages/AboutUs.aspx and https://www.paypal.com/gb/webapps/mpp/not-for-profit)
-## Boost this clusters that are aound Durham by making events on this areas
+## Make campaign of regular giver online, take advantage of expantion through digitalization (promote it on events and website, QR code, etc.)
+## Boost this clusters that are aound Durham by making events on this areas or awareness campaigns (EIP?)
+
+# Proposed dashboards
+# time series, filterd by nominal/sourcegroup/sourcecode, selecting what years should appear on graph, of Number of donors and/or sum of donations/average sum of donations
+# time series, filtered by nominal/sourcegroup/sourcecode, of total of donations
+# time series (x = month), filtered by sourcegroup, selecting what years should appear on graph, % of new donors
+# times series, filtered by nominal, number and sum of donations that are between certain ranges (0, 1000) - (1000, 5000) - (5000, 10000) - (10000, +)
 
 
 

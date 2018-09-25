@@ -47,7 +47,7 @@ ggmap(map, base_layer = ggplot(dataset_maps, aes(longitude, latitude))) +
 
 ### By region, year, all
 
-map <- get_map(Coord.City, zoom = 8, scale = 1)
+# map <- get_map(Coord.City, zoom = 8, scale = 1)
 
 
 dataset_maps<- dataset_donations %>%
@@ -97,22 +97,7 @@ ggmap(map, base_layer = ggplot(dataset_maps, aes(longitude, latitude))) +
   geom_point(aes(color = sum.donations), alpha = 0.08) +
   facet_wrap(~ year)
 
-### By region, month, events
 
-map <- get_map(Coord.City, zoom = 10, scale = 1)
-
-dataset_maps<- dataset_donations %>%
-  select(postcode, year, month, donation.amount, development.income, latitude, longitude) %>%
-  na.omit() %>%
-  separate(postcode, c("region", "area")) %>%
-  unite(MY, month, year) %>%
-  group_by(region, MY) %>% 
-  mutate(sum.donations = sum(donation.amount)) %>%
-  filter(development.income == "Events", sum.donations > 100)
-
-
-ggmap(map, base_layer = ggplot(dataset_maps, aes(longitude, latitude))) +
-  geom_point(aes(color = sum.donations), alpha = 0.08) 
 
 
 ####################################### Mean donations ##########
@@ -200,6 +185,11 @@ ggmap(map, base_layer = ggplot(dataset_maps, aes(longitude, latitude))) +
 
 ######################## SDD ######################## 
 
+# Analysis of dispersion of payments by year
+
+### By year
+## Insight: Payments in 2017 are more spread than it used to be in 2012
+
 table_2017<- dataset_donations %>% 
   filter(year == "2017") %>%
   filter(development.income == "Events") %>%
@@ -273,7 +263,82 @@ text(r.SDD$CENTRE.x, r.SDD$CENTRE.y, "+", col="red")
 
 spatial_st.dev2012<- (r.SDD$SDD)
 
-#################### 
+
+
+### By event or not event
+## Insight: payments of not events are more dispersed 
+event<- dataset_donations %>% 
+  filter(development.income == "Events") %>%
+  select(longitude, latitude) %>%
+  na.omit()
+
+not_event<- dataset_donations %>% 
+  filter(!development.income == "Events") %>%
+  select(longitude, latitude) %>%
+  na.omit()
+
+####################  
+plot(event, 
+     xlab="", 
+     ylab="", 
+     asp=1, 
+     axes=FALSE, 
+     main="Donations (event)", type="n")
+
+calc_sdd(id=1, 
+         filename="SDD_Output.txt", 
+         centre.xy=NULL, 
+         calccentre=TRUE, 
+         weighted=FALSE, 
+         weights=NULL, 
+         points=event, verbose=FALSE)
+
+
+plot_sdd(plotnew=FALSE, 
+         plotcentre=FALSE, 
+         centre.col="red", 
+         centre.pch="1", 
+         sdd.col="red",
+         sdd.lwd=1,
+         titletxt="", 
+         plotpoints=TRUE,points.col="black")
+
+# Label the centroid, explicitly using the hidden r.SDD object that was used in plot_sde
+text(r.SDD$CENTRE.x, r.SDD$CENTRE.y, "+", col="red")
+
+spatial_st_dev_event<- (r.SDD$SDD)
+
+####################  
+
+plot(not_event, 
+     xlab="", 
+     ylab="", 
+     asp=1, 
+     axes=FALSE, 
+     main="Donations (not event)", type="n")
+
+calc_sdd(id=1, 
+         filename="SDD_Output.txt", 
+         centre.xy=NULL, 
+         calccentre=TRUE, 
+         weighted=FALSE, 
+         weights=NULL, 
+         points=not_event, verbose=FALSE)
+
+
+plot_sdd(plotnew=FALSE, 
+         plotcentre=FALSE, 
+         centre.col="red", 
+         centre.pch="1", 
+         sdd.col="red",
+         sdd.lwd=1,
+         titletxt="", 
+         plotpoints=TRUE,points.col="black")
+
+# Label the centroid, explicitly using the hidden r.SDD object that was used in plot_sde
+text(r.SDD$CENTRE.x, r.SDD$CENTRE.y, "+", col="red")
+
+spatial_st_dev_notevent<- (r.SDD$SDD)
 
 
 
