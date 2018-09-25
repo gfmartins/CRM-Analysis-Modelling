@@ -1,15 +1,17 @@
 library(tidyverse)
 library(readxl)
-library(tidyverse)
 library(readxl)
 library(gridExtra)
 library(ggthemes)
-library(extrafont)
 library(astsa)
 library(forecast)
 library(xts) 
+library(ggmap)
+
 
 ########################  Import data ########################  
+
+# Donations dataset
 
 ### Group codes
 ## Import table with group codes
@@ -81,6 +83,48 @@ dataset_donations <- dataset_donations %>%
   distinct(journal.no, .keep_all = TRUE)
 
 
+# Geo dataset
+
+# Import UK postcodes table (open data)
+table_postcodes<- read_csv("~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Support Services/ukpostcodes.csv") %>% 
+  rename_all(funs(tolower(make.names(.)))) %>%
+  rename_all(funs(gsub("_", ".", .))) %>%
+  select(postcode, latitude, longitude)
+
+# Import events Postcode and join it with UK postcodes to get the longitud and latitude
+table_events_postcodes<- read_excel("~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Support Services/Events Postcodes.xlsx",
+                                    skip = 1) %>%
+  rename_all(funs(tolower(make.names(.)))) %>%
+  rename_all(funs(gsub("_", ".", .))) %>%
+  inner_join(table_postcodes, by = "postcode") %>%
+  select(source, postcode.event = postcode, latitude.event = latitude, longitude.event = longitude)
+
+
+# Import retail Postcode and join it with UK postcodes to get the longitud and latitude
+table_retail_postcodes<- read_excel("~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Support Services/Retail Postcodes.xlsx",
+                                    skip = 1) %>%
+  rename_all(funs(tolower(make.names(.)))) %>%
+  rename_all(funs(gsub("_", ".", .))) %>%
+  inner_join(table_postcodes, by = "postcode") %>%
+  select(type, postcode, opened, latitude, longitude)
+
+
+# Include postcodes of donations and events into main dataset
+dataset_donations<- dataset_donations %>%
+  left_join(table_postcodes, by = "postcode") %>%
+  left_join(table_events_postcodes, by = "source")
+
+# Save the coordinates of a city in a vector (search in google )
+### In this case Durham 
+Coord.City <- c(lon = -1.581517, lat = 54.77952)
+
+## coordinates, zoom = how zoomed will the map be showed, scale = resolution of the map (1 worst ), map type = tipo de mapa (?getmap para ver todos los tipos), source = de donde se lo descarga (si no se especifica es “google”
+map <- get_map(Coord.City, zoom = 11, scale = 1)
+
+map2<- get_map(Coord.City, zoom = 10, scale = 1)
+
+
+
 ################################################################################################################
 
 # Time series of every source of income, sum of donations weekly
@@ -107,7 +151,7 @@ dataset_donations %>%
   filter(development.income == income) %>%
   ggplot(aes(x = donation.date, y = (Donation))) + 
   geom_line() +
-  geom_smooth(method = "lm") + 
+  geom_smooth(method = "loess") + 
   theme_economist() +
   labs(title = "St. Cuthbert's Hospice", subtitle = "Time Series of Donations by Source", x = "Date", y = "Donations") +
   theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5), legend.position = "right", plot.title = element_text(size=20), plot.subtitle = element_text(size = 12), text = element_text(family = "Tahoma")) 
@@ -207,7 +251,7 @@ lambda<- vectorT %>% BoxCox.lambda()
 classifierT1 <- auto.arima(train, lambda = lambda, stepwise = FALSE, seasonal = TRUE)
 
 # Check that both models have white noise residuals
-checkresiduals(classifierT1)
+# checkresiduals(classifierT1)
 
 ## Use accuracy() to compare the paramethers of auto.arima vs the manual fit
 for_classifierT1 <- forecast(classifierT1, h = forecast_window)
@@ -306,7 +350,7 @@ classifierT1 <- auto.arima(train, lambda = lambda, stepwise = FALSE, seasonal = 
 # classifierT2 <- ets(train)
 
 # Check that both models have white noise residuals
-checkresiduals(classifierT1)
+# checkresiduals(classifierT1)
 # checkresiduals(classifierT2)
 
 ## Use accuracy() to compare the paramethers of auto.arima vs the manual fit
@@ -433,6 +477,270 @@ plot2<- dataset_donations %>%
 
 grid.arrange(plot1, plot2, nrow=1, ncol=2)
 
+#################### Geodata analysis #######################
+
+# Analysis of digital and physical payments
+## Insight: events are digitally paid, while others not much / distribution similar
+## Insight 2: if events payments are digital, but events payments are not that spread, it means that
+# digital payments do not drive expantion, but the locality of the event
+
+dataset_maps<- dataset_donations %>% 
+  mutate(digi.or.phys = case_when(payment.type %in% c(1,2,3,4,5,10,11,12,13,16,18,20) ~ "Phys",
+                                  payment.type %in% c(14,15,17,19) ~ "Digi")) %>%
+  select(postcode, year, month, donation.amount, digi.or.phys, latitude, longitude, development.income) %>%
+  na.omit() %>%
+  separate(postcode, c("region", "area")) %>%
+  unite(MY, month, year) %>%
+  group_by(region, MY) %>% 
+  mutate(sum.donations = log(sum(donation.amount))) %>%
+  filter(!development.income == "Events")
+
+plot1<- ggmap(map2, base_layer = ggplot(dataset_maps, aes(longitude, latitude))) +
+  geom_point(aes(color = digi.or.phys), alpha = 0.1) +
+  geom_point(data = table_events_postcodes, 
+             mapping = aes(x = longitude.event, y = latitude.event), colour = "orange") +
+  labs(title = "Mapping of digital and physical payments by area", subtitle = "Not events", x = "Longitude", y = "Latitude") 
+
+
+
+dataset_maps<- dataset_donations %>% 
+  mutate(digi.or.phys = case_when(payment.type %in% c(1,2,3,4,5,10,11,12,13,16,18,20) ~ "Phys",
+                                  payment.type %in% c(14,15,17,19) ~ "Digi")) %>%
+  select(postcode, year, month, donation.amount, digi.or.phys, latitude, longitude, development.income) %>%
+  na.omit() %>%
+  separate(postcode, c("region", "area")) %>%
+  unite(MY, month, year) %>%
+  group_by(region, MY) %>% 
+  mutate(sum.donations = log(sum(donation.amount))) %>%
+  filter(development.income == "Events")
+
+plot2<- ggmap(map2, base_layer = ggplot(dataset_maps, aes(longitude, latitude))) +
+  geom_point(aes(color = digi.or.phys), alpha = 0.1) +
+  geom_point(data = table_events_postcodes, 
+             mapping = aes(x = longitude.event, y = latitude.event), colour = "orange") +
+  labs(title = "", subtitle = "Events", x = "Longitude", y = "Latitude") 
+
+grid.arrange(plot1, plot2, nrow=1, ncol=2)
+
+
+######################## SDD ######################## 
+
+# Analysis of dispersion of payments by year
+## Digital payments drive expansion of donations across geographical areas?
+
+### By year
+## Insight: Payments in 2017 are more spread than it used to be in 2012
+table_2017<- dataset_donations %>% 
+  filter(year == "2017") %>%
+  filter(development.income == "Events") %>%
+  select(longitude, latitude) %>%
+  na.omit()
+
+table_2012<- dataset_donations %>% 
+  filter(year == "2012") %>%
+  filter(development.income == "Events") %>%
+  select(longitude, latitude) %>%
+  na.omit()
+
+# 2017
+plot(table_2017, 
+     xlab="", 
+     ylab="", 
+     asp=1, 
+     axes=FALSE, 
+     main="Donations (2017)", type="n")
+
+calc_sdd(id=1, 
+         filename="SDD_Output.txt", 
+         centre.xy=NULL, 
+         calccentre=TRUE, 
+         weighted=FALSE, 
+         weights=NULL, 
+         points=table_2017, verbose=FALSE)
+
+
+plot_sdd(plotnew=FALSE, 
+         plotcentre=FALSE, 
+         centre.col="red", 
+         centre.pch="1", 
+         sdd.col="red",
+         sdd.lwd=1,
+         titletxt="", 
+         plotpoints=TRUE,points.col="black")
+
+# Label the centroid, explicitly using the hidden r.SDD object that was used in plot_sde
+text(r.SDD$CENTRE.x, r.SDD$CENTRE.y, "+", col="red")
+
+spatial_st.dev2017<- (r.SDD$SDD)
+
+
+# 2012
+plot(table_2012, 
+     xlab="", 
+     ylab="", 
+     asp=1, 
+     axes=FALSE, 
+     main="Donations (2012)", type="n")
+
+calc_sdd(id=1, 
+         filename="SDD_Output.txt", 
+         centre.xy=NULL, 
+         calccentre=TRUE, 
+         weighted=FALSE, 
+         weights=NULL, 
+         points=table_2012, verbose=FALSE)
+
+
+plot_sdd(plotnew=FALSE, 
+         plotcentre=FALSE, 
+         centre.col="red", 
+         centre.pch="1", 
+         sdd.col="red",
+         sdd.lwd=1,
+         titletxt="", 
+         plotpoints=TRUE,points.col="black")
+
+# Label the centroid, explicitly using the hidden r.SDD object that was used in plot_sde
+text(r.SDD$CENTRE.x, r.SDD$CENTRE.y, "+", col="red")
+
+spatial_st.dev2012<- (r.SDD$SDD)
+
+
+
+### By event or not event
+## Insight: payments of not events are more dispersed 
+## Digital payments don't drive expansion
+## What drives expansion?
+event<- dataset_donations %>% 
+  filter(development.income == "Events") %>%
+  select(longitude, latitude) %>%
+  na.omit()
+
+not_event<- dataset_donations %>% 
+  filter(!development.income == "Events", longitude < 0) %>%
+  select(longitude, latitude) %>%
+  na.omit()
+
+# Events
+plot(event, 
+     xlab="", 
+     ylab="", 
+     asp=1, 
+     axes=FALSE, 
+     main="Donations (event)", type="n")
+
+calc_sdd(id=1, 
+         filename="SDD_Output.txt", 
+         centre.xy=NULL, 
+         calccentre=TRUE, 
+         weighted=FALSE, 
+         weights=NULL, 
+         points=event, verbose=FALSE)
+
+
+plot_sdd(plotnew=FALSE, 
+         plotcentre=FALSE, 
+         centre.col="red", 
+         centre.pch="1", 
+         sdd.col="red",
+         sdd.lwd=1,
+         titletxt="", 
+         plotpoints=TRUE,points.col="black")
+
+# Label the centroid, explicitly using the hidden r.SDD object that was used in plot_sde
+text(r.SDD$CENTRE.x, r.SDD$CENTRE.y, "+", col="red")
+
+spatial_st_dev_event<- (r.SDD$SDD)
+
+
+# Not events
+plot(not_event, 
+     xlab="", 
+     ylab="", 
+     asp=1, 
+     axes=FALSE, 
+     main="Donations (not event)", type="n")
+
+calc_sdd(id=1, 
+         filename="SDD_Output.txt", 
+         centre.xy=NULL, 
+         calccentre=TRUE, 
+         weighted=FALSE, 
+         weights=NULL, 
+         points=not_event, verbose=FALSE)
+
+
+plot_sdd(plotnew=FALSE, 
+         plotcentre=FALSE, 
+         centre.col="red", 
+         centre.pch="1", 
+         sdd.col="red",
+         sdd.lwd=1,
+         titletxt="", 
+         plotpoints=TRUE,points.col="black")
+
+# Label the centroid, explicitly using the hidden r.SDD object that was used in plot_sde
+text(r.SDD$CENTRE.x, r.SDD$CENTRE.y, "+", col="red")
+
+spatial_st_dev_notevent<- (r.SDD$SDD)
+
+
+### By region, month, events
+## There are clusters on the left that don't have any event and can be boosted
+## If this clusters get bigger, the SDD should get higher
+dataset_maps<- dataset_donations %>%
+  select(postcode, year, month, donation.amount, development.income, latitude, longitude) %>%
+  na.omit() %>%
+  separate(postcode, c("region", "area")) %>%
+  unite(MY, month, year) %>%
+  group_by(region, MY) %>% 
+  mutate(sum.donations = log(sum(donation.amount))) 
+
+
+plot11<- ggmap(map, base_layer = ggplot(dataset_maps, aes(longitude, latitude))) +
+  geom_point(aes(color = sum.donations), alpha = 0.08) +
+  geom_point(data = table_events_postcodes, 
+             mapping = aes(x = longitude.event, y = latitude.event), colour = "orange") +
+  geom_point(data = table_retail_postcodes, 
+             mapping = aes(x = longitude, y = latitude), colour = "red")
+
+plot12<- ggmap(map2, base_layer = ggplot(dataset_maps, aes(longitude, latitude))) +
+  geom_point(aes(color = sum.donations), alpha = 0.08) +
+  geom_point(data = table_events_postcodes, 
+             mapping = aes(x = longitude.event, y = latitude.event), colour = "orange") +
+  geom_point(data = table_retail_postcodes, 
+             mapping = aes(x = longitude, y = latitude), colour = "red")
+
+
+grid.arrange(plot11, plot12, nrow=1, ncol=2)
+
+
+
+### By region, faceted yearly, new retail shops marked
+## Growth happens at opening, then dissapears
+## Do the hospice stop doing awareness campaign with time?
+
+table_retail_postcodes_filtered<- table_retail_postcodes %>%
+  filter(postcode %in% c("DL15 9HT", "DH7 8XD"))
+
+
+dataset_maps<- dataset_donations %>%
+  select(postcode, year, donation.amount, development.income, latitude, longitude) %>%
+  na.omit() %>%
+  separate(postcode, c("region", "area")) %>%
+  # filter(year %in% c("2014", "2015", "2016", "2017")) %>%
+  group_by(region, year) %>% 
+  mutate(sum.donations = log(sum(donation.amount))) %>%
+  filter(development.income == "Events")
+
+
+ggmap(map, base_layer = ggplot(dataset_maps, aes(longitude, latitude))) +
+  geom_point(aes(color = sum.donations), alpha = 0.08) +
+  geom_point(data = table_retail_postcodes_filtered, 
+             mapping = aes(x = longitude, y = latitude), colour = "red") +
+  geom_point(aes(x = -1.607849, y = 54.751254), colour = "red") +
+  facet_wrap(~ year)
+
 
 
 ### ### ### ### ### ### ### ### ### ### ### Conclutions ### ### ### ### ### ### ### ### ### ### ### ###
@@ -446,7 +754,7 @@ grid.arrange(plot1, plot2, nrow=1, ncol=2)
 # Proposal:
 ## Make campaign of regular giver online (promote it on events and website, QR code, etc.)
 # (https://www.directdebit.co.uk/Resources/Pages/AboutUs.aspx and https://www.paypal.com/gb/webapps/mpp/not-for-profit)
-
+## Boost this clusters that are aound Durham by making events on this areas
 
 
 
