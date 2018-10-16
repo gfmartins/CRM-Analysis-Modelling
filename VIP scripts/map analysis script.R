@@ -1,5 +1,7 @@
 library(ggmap)
 
+install.packages("devtools")
+
 # Import UK postcodes table (open data)
 table_postcodes<- read_csv("~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Support Services/ukpostcodes.csv") %>% 
   rename_all(funs(tolower(make.names(.)))) %>%

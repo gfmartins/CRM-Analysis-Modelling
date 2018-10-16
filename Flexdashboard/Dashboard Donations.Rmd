@@ -112,6 +112,12 @@ Column {.sidebar data-width=300}
 <br>
 ```{r}
 
+## Select input to select graph
+selectInput(inputId = "graphid",
+                      label = "Select the Graph to Display",
+                      choices =  c("Sum of Donations" = "sum.donations", "Average of Donations" = "average.donations", "Number of Donations" = "number.donations"),
+                      multiple = FALSE)
+
 # Date input
 dateRangeInput(inputId = "dateid1",
                        label = "Select dates",
@@ -140,11 +146,6 @@ selectInput(inputId = "sourceid",
                       multiple = FALSE)
 
 
-## Checkbox to select graph
-checkboxGroupInput(inputId = "graphid",
-                      label = "Select the Graph to Display",
-                      choices =  c("Sum of Donations" = sum.donations, "Average of Donations" = average.donations, "Number of Donations" = number.donations))
-
 ## Boton to create plot
 actionButton(inputId = "actionid1", 
              label = "Clic to Generate Graph")
@@ -172,7 +173,25 @@ observeEvent(input$source.groupid, {
 ## Create reactive dataset that will depend on date, nominal, source.group and source code
 reactiveDonations<- reactive({
   dataset_donations %>%
-    # select(Spell = spell, Score = values, Date.of.Contact = date.of.contact, everything()) %>%
+    select(journal.no, 
+         donation.date, 
+         nominal, 
+         source.group,
+         source,
+         donation.day,
+         donation.week,
+         donation.month,
+         donation.year,
+         donation.amount) %>%
+  mutate(year.unite = strftime(.$donation.date, format = "%Y")) %>%
+  mutate(month.unite = strftime(.$donation.date, format = "%m")) %>%
+  unite(MY, month.unite, year.unite) %>%
+  group_by(MY, source) %>% 
+  mutate(sum.donations = sum(donation.amount), 
+         average.donations = mean(donation.amount),
+         number.donations = n()) %>%
+  ungroup() %>%
+  gather(index, value, -c(journal.no:donation.year, MY)) %>% 
                filter(donation.date >= input$dateid1[1] & donation.date <= input$dateid1[2],
                       nominal == input$nominalid,
                       source.group == input$source.groupid,
@@ -219,25 +238,25 @@ Column {data-width=700}
 renderPlotly({
   req(input$actionid1)
   ggplotly(isolate(reactiveDonations()) %>%
-  select(journal.no, 
-         donation.date, 
-         nominal, 
-         source.group,
-         source,
-         donation.day,
-         donation.week,
-         donation.month,
-         donation.year,
-         donation.amount) %>%
-  mutate(year.unite = strftime(.$donation.date, format = "%Y")) %>%
-  mutate(month.unite = strftime(.$donation.date, format = "%m")) %>%
-  unite(MY, month.unite, year.unite) %>%
-  group_by(MY, source) %>% # In shiny gere goes input$Nominal, source...
-  mutate(sum.donations = sum(donation.amount), 
-         average.donations = mean(donation.amount),
-         number.donations = n()) %>%
-  ungroup() %>%
-  gather(index, value, -c(journal.no:donation.year, MY)) %>%
+  # select(journal.no, 
+  #        donation.date, 
+  #        nominal, 
+  #        source.group,
+  #        source,
+  #        donation.day,
+  #        donation.week,
+  #        donation.month,
+  #        donation.year,
+  #        donation.amount) %>%
+  # mutate(year.unite = strftime(.$donation.date, format = "%Y")) %>%
+  # mutate(month.unite = strftime(.$donation.date, format = "%m")) %>%
+  # unite(MY, month.unite, year.unite) %>%
+  # group_by(MY, source) %>% # In shiny gere goes input$Nominal, source...
+  # mutate(sum.donations = sum(donation.amount), 
+  #        average.donations = mean(donation.amount),
+  #        number.donations = n()) %>%
+  # ungroup() %>%
+  # gather(index, value, -c(journal.no:donation.year, MY)) %>%
   ggplot(aes(donation.month, value, group = donation.year, colour = donation.year)) + # In shiny gere goes input$sum, mean...
   geom_line()
   )

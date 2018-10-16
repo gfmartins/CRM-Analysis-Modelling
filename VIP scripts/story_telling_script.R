@@ -7,8 +7,12 @@ library(astsa)
 library(forecast)
 library(xts) 
 library(ggmap)
-
-
+library(aspace)
+library(forecast)
+library(TTR)
+library(data.table)
+library(leaflet)
+library(plotly)
 ########################  Import data ########################  
 
 # Donations dataset
@@ -114,13 +118,15 @@ dataset_donations<- dataset_donations %>%
   left_join(table_postcodes, by = "postcode") %>%
   left_join(table_events_postcodes, by = "source")
 
-# Save the coordinates of a city in a vector (search in google )
-### In this case Durham 
+
+
+# # Save the coordinates of a city in a vector (search in google )
+# ### In this case Durham 
 Coord.City <- c(lon = -1.581517, lat = 54.77952)
-
-## coordinates, zoom = how zoomed will the map be showed, scale = resolution of the map (1 worst ), map type = tipo de mapa (?getmap para ver todos los tipos), source = de donde se lo descarga (si no se especifica es “google”
-map <- get_map(Coord.City, zoom = 11, scale = 1)
-
+# 
+# ## coordinates, zoom = how zoomed will the map be showed, scale = resolution of the map (1 worst ), map type = tipo de mapa (?getmap para ver todos los tipos), source = de donde se lo descarga (si no se especifica es “google”
+map <- get_map(Coord.City, zoom = 1, scale = 1)
+# 
 map2<- get_map(Coord.City, zoom = 10, scale = 1)
 
 
@@ -157,7 +163,7 @@ dataset_donations %>%
   theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5), legend.position = "right", plot.title = element_text(size=20), plot.subtitle = element_text(size = 12), text = element_text(family = "Tahoma")) 
 
 
-######################## RG and digital payments analysis ########################
+######################## RG analysis ########################
 
 ### Comparison of RG donations vs others, with projection 
 
@@ -395,47 +401,47 @@ for_classifierFull1$mean
 
 
 
-### Donations by payment type 
+######################## Digital vs physical payments ########################
 
 # Timeseries of payments by payment type
 
 # ## Number of donations
-# plot1<- dataset_donations %>% 
-#   filter(payment.type != 5, payment.type != 10, payment.type != 20, payment.type != 13)  %>%
-#   arrange(donation.date) %>%
-#   unite(MY, month, year) %>%
-#   group_by(MY, payment.type) %>%
-#   mutate(CountDon = length(payment.type)) %>%
-#   arrange(donation.date) %>%
-#   distinct(MY, .keep_all = TRUE) %>%
-#   ggplot(aes(x = donation.date, y = log(CountDon), colour = factor(payment.type))) + 
-#   geom_line() +
-#   geom_smooth(method = "lm") +
-#   facet_grid(. ~ payment.type) + 
-#   theme_economist() +
-#   guides(colour = FALSE) +
-#   labs(title = "St. Cuthbert's Hospice", subtitle = "Time Series of Number of Donations", x = "Date", y = "Log # Donations") +
-#   theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5), legend.position = "right", plot.title = element_text(size=20), plot.subtitle = element_text(size = 12), text = element_text(family = "Tahoma")) 
-# 
+plot1<- dataset_donations %>%
+  filter(payment.type != 5, payment.type != 10, payment.type != 20, payment.type != 13)  %>%
+  arrange(donation.date) %>%
+  unite(MY, month, year) %>%
+  group_by(MY, payment.type) %>%
+  mutate(CountDon = length(payment.type)) %>%
+  arrange(donation.date) %>%
+  distinct(MY, .keep_all = TRUE) %>%
+  ggplot(aes(x = donation.date, y = log(CountDon), colour = factor(payment.type))) +
+  geom_line() +
+  geom_smooth(method = "lm") +
+  facet_grid(. ~ payment.type) +
+  theme_economist() +
+  guides(colour = FALSE) +
+  labs(title = "St. Cuthbert's Hospice", subtitle = "Time Series of Number of Donations", x = "Date", y = "Log # Donations") +
+  theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5), legend.position = "right", plot.title = element_text(size=20), plot.subtitle = element_text(size = 12), text = element_text(family = "Tahoma"))
+
 # ## Amount of donations
-# plot2<- dataset_donations %>% 
-#   filter(payment.type != 5, payment.type != 10, payment.type != 20, payment.type != 13)  %>%
-#   arrange(donation.date) %>%
-#   unite(MY, month, year) %>%
-#   group_by(MY, payment.type) %>%
-#   mutate(SumDon = sum(donation.amount)) %>%
-#   arrange(donation.date) %>%
-#   distinct(MY, .keep_all = TRUE) %>%
-#   ggplot(aes(x = donation.date, y = log(SumDon), colour = factor(payment.type))) + 
-#   geom_line() +
-#   geom_smooth(method = "lm") +
-#   facet_grid(. ~ payment.type) + 
-#   theme_economist() +
-#   guides(colour = FALSE) +
-#   labs(title = "St. Cuthbert's Hospice", subtitle = "Time Series of amount of Donations", x = "Date", y = "Log Donations") +
-#   theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5), legend.position = "right", plot.title = element_text(size=20), plot.subtitle = element_text(size = 12), text = element_text(family = "Tahoma")) 
-# 
-# grid.arrange(plot1, plot2, nrow=2, ncol=1)
+plot2<- dataset_donations %>%
+  filter(payment.type != 5, payment.type != 10, payment.type != 20, payment.type != 13)  %>%
+  arrange(donation.date) %>%
+  unite(MY, month, year) %>%
+  group_by(MY, payment.type) %>%
+  mutate(SumDon = sum(donation.amount)) %>%
+  arrange(donation.date) %>%
+  distinct(MY, .keep_all = TRUE) %>%
+  ggplot(aes(x = donation.date, y = log(SumDon), colour = factor(payment.type))) +
+  geom_line() +
+  geom_smooth(method = "lm") +
+  facet_grid(. ~ payment.type) +
+  theme_economist() +
+  guides(colour = FALSE) +
+  labs(title = "St. Cuthbert's Hospice", subtitle = "Time Series of amount of Donations", x = "Date", y = "Log Donations") +
+  theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5), legend.position = "right", plot.title = element_text(size=20), plot.subtitle = element_text(size = 12), text = element_text(family = "Tahoma"))
+
+grid.arrange(plot1, plot2, nrow=2, ncol=1)
 
 
 # Digital donations vs physical donations
@@ -486,6 +492,47 @@ grid.arrange(plot1, plot2, nrow=1, ncol=2)
 ## Insight 2: if events payments are digital, but events payments are not that spread, it means that
 # digital payments do not drive expantion, but the locality of the event
 
+# dataset_maps<- dataset_donations %>% 
+#   mutate(digi.or.phys = case_when(payment.type %in% c(1,2,3,4,5,10,11,12,13,16,18,20) ~ "Phys",
+#                                   payment.type %in% c(14,15,17,19) ~ "Digi")) %>%
+#   select(postcode, year, month, donation.amount, digi.or.phys, latitude, longitude, development.income) %>%
+#   na.omit() %>%
+#   separate(postcode, c("region", "area")) %>%
+#   unite(MY, month, year) %>%
+#   group_by(region, MY) %>% 
+#   mutate(sum.donations = log(sum(donation.amount))) %>%
+#   filter(!development.income == "Events")
+# 
+# plot1<- ggmap(map2, base_layer = ggplot(dataset_maps, aes(longitude, latitude))) +
+#   geom_point(aes(color = digi.or.phys), alpha = 0.1) +
+#   geom_point(data = table_events_postcodes, 
+#              mapping = aes(x = longitude.event, y = latitude.event), colour = "orange") +
+#   labs(title = "Mapping of digital and physical payments by area", subtitle = "Not events", x = "Longitude", y = "Latitude") 
+# 
+# 
+# 
+# dataset_maps<- dataset_donations %>% 
+#   mutate(digi.or.phys = case_when(payment.type %in% c(1,2,3,4,5,10,11,12,13,16,18,20) ~ "Phys",
+#                                   payment.type %in% c(14,15,17,19) ~ "Digi")) %>%
+#   select(postcode, year, month, donation.amount, digi.or.phys, latitude, longitude, development.income) %>%
+#   na.omit() %>%
+#   separate(postcode, c("region", "area")) %>%
+#   unite(MY, month, year) %>%
+#   group_by(region, MY) %>% 
+#   mutate(sum.donations = log(sum(donation.amount))) %>%
+#   filter(development.income == "Events")
+# 
+# plot2<- ggmap(map2, base_layer = ggplot(dataset_maps, aes(longitude, latitude))) +
+#   geom_point(aes(color = digi.or.phys), alpha = 0.1) +
+#   geom_point(data = table_events_postcodes, 
+#              mapping = aes(x = longitude.event, y = latitude.event), colour = "orange") +
+#   labs(title = "", subtitle = "Events", x = "Longitude", y = "Latitude") 
+# 
+# grid.arrange(plot1, plot2, nrow=1, ncol=2)
+
+
+
+# Non events
 dataset_maps<- dataset_donations %>% 
   mutate(digi.or.phys = case_when(payment.type %in% c(1,2,3,4,5,10,11,12,13,16,18,20) ~ "Phys",
                                   payment.type %in% c(14,15,17,19) ~ "Digi")) %>%
@@ -497,14 +544,23 @@ dataset_maps<- dataset_donations %>%
   mutate(sum.donations = log(sum(donation.amount))) %>%
   filter(!development.income == "Events")
 
-plot1<- ggmap(map2, base_layer = ggplot(dataset_maps, aes(longitude, latitude))) +
-  geom_point(aes(color = digi.or.phys), alpha = 0.1) +
-  geom_point(data = table_events_postcodes, 
-             mapping = aes(x = longitude.event, y = latitude.event), colour = "orange") +
-  labs(title = "Mapping of digital and physical payments by area", subtitle = "Not events", x = "Longitude", y = "Latitude") 
+
+leaflet(dataset_maps) %>%
+  addTiles() %>%  
+  setView(-1.581517, 54.77952, zoom = 9) %>%
+  addCircles(
+    lng = dataset_maps$longitude,
+    lat = dataset_maps$latitude, 
+    radius = dataset_maps$sum.donations, 
+    label = dataset_maps$digi.or.phys,
+    color = ~ pal(digi.or.phys))
+
+pal <- colorFactor(
+  palette = c('red', 'blue'),
+  domain = dataset_maps$digi.or.phys)
 
 
-
+# Events
 dataset_maps<- dataset_donations %>% 
   mutate(digi.or.phys = case_when(payment.type %in% c(1,2,3,4,5,10,11,12,13,16,18,20) ~ "Phys",
                                   payment.type %in% c(14,15,17,19) ~ "Digi")) %>%
@@ -516,13 +572,15 @@ dataset_maps<- dataset_donations %>%
   mutate(sum.donations = log(sum(donation.amount))) %>%
   filter(development.income == "Events")
 
-plot2<- ggmap(map2, base_layer = ggplot(dataset_maps, aes(longitude, latitude))) +
-  geom_point(aes(color = digi.or.phys), alpha = 0.1) +
-  geom_point(data = table_events_postcodes, 
-             mapping = aes(x = longitude.event, y = latitude.event), colour = "orange") +
-  labs(title = "", subtitle = "Events", x = "Longitude", y = "Latitude") 
-
-grid.arrange(plot1, plot2, nrow=1, ncol=2)
+leaflet(dataset_maps) %>%
+  addTiles() %>%  
+  setView(-1.581517, 54.77952, zoom = 9) %>%
+  addCircles(
+    lng = dataset_maps$longitude,
+    lat = dataset_maps$latitude, 
+    radius = dataset_maps$sum.donations, 
+    label = dataset_maps$digi.or.phys,
+    color = ~ pal(digi.or.phys))
 
 
 ### SDD
@@ -536,13 +594,15 @@ table_2017<- dataset_donations %>%
   filter(year == "2017") %>%
   filter(development.income == "Events") %>%
   select(longitude, latitude) %>%
-  na.omit()
+  na.omit() %>%
+  as.data.frame()
 
 table_2012<- dataset_donations %>% 
   filter(year == "2012") %>%
   filter(development.income == "Events") %>%
   select(longitude, latitude) %>%
-  na.omit()
+  na.omit() %>%
+  as.data.frame()
 
 # 2017
 plot(table_2017, 
@@ -616,12 +676,14 @@ spatial_st.dev2012<- (r.SDD$SDD)
 event<- dataset_donations %>% 
   filter(development.income == "Events") %>%
   select(longitude, latitude) %>%
-  na.omit()
+  na.omit() %>%
+  as.data.frame()
 
 not_event<- dataset_donations %>% 
   filter(!development.income == "Events", longitude < 0) %>%
   select(longitude, latitude) %>%
-  na.omit()
+  na.omit() %>%
+  as.data.frame()
 
 # Events
 plot(event, 
@@ -732,7 +794,7 @@ dataset_maps<- dataset_donations %>%
   separate(postcode, c("region", "area")) %>%
   # filter(year %in% c("2014", "2015", "2016", "2017")) %>%
   group_by(region, year) %>% 
-  mutate(sum.donations = log(sum(donation.amount))) %>%
+  mutate(sum.donations = (length(donation.amount))) %>%
   filter(development.income == "Events")
 
 
@@ -762,6 +824,11 @@ ggmap(map, base_layer = ggplot(dataset_maps, aes(longitude, latitude))) +
 # time series, filtered by nominal/sourcegroup/sourcecode, of total of donations
 # time series (x = month), filtered by sourcegroup, selecting what years should appear on graph, % of new donors
 # times series, filtered by nominal, number and sum of donations that are between certain ranges (0, 1000) - (1000, 5000) - (5000, 10000) - (10000, +)
+# Geodashboard: spread of donatios (square with SDD), filtered by nominal code, digital vs non digital, sliding bar over time. Each dot a donation on a map
+            # : referral postcodes vs donations vs retail (try inputing text box to enter postcode and plot the dot on map) 
+            # : donations with size by sum of donation, sliding bar over time
+
+
 
 
 
