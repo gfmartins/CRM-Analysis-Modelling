@@ -156,7 +156,7 @@ observeEvent(input$nominalid, {
      filter(nominal == input$nominalid, in.use == "Y") %>%
               distinct(source.group)
    
-  updateSelectInput(session, "source.groupid", choices = filtered_donations1)
+  updateSelectInput(session, "source.groupid", choices = c("", filtered_donations1))
    
 })
 
@@ -165,14 +165,14 @@ observeEvent(input$source.groupid, {
     filter(source.group == input$source.groupid, in.use == "Y") %>%
     distinct(source)
   
-  updateSelectInput(session, "sourceid", choices = filtered_donations2)
+  updateSelectInput(session, "sourceid", choices = c("", filtered_donations2))
   
 })
 
 
 ## Create reactive dataset that will depend on date, nominal, source.group and source code
 reactiveDonations<- reactive({
-  if (input$nominalid == "") {
+  if (input$nominalid == "") { ## DONE
 
     dataset_donations %>%
     select(journal.no, 
@@ -196,8 +196,35 @@ reactiveDonations<- reactive({
   gather(index, value, -c(journal.no:donation.year, MY)) %>% 
                filter(donation.date >= input$dateid1[1] & donation.date <= input$dateid1[2], index == input$graphid)
 
-} else {
-  
+  } else if (!input$nominalid == "" & is.null(input$source.group) & is.null(input$source)){ # DONE
+
+     dataset_donations %>%
+    select(journal.no,
+         donation.date,
+         nominal,
+         source.group,
+         source,
+         donation.day,
+         donation.week,
+         donation.month,
+         donation.year,
+         donation.amount) %>%
+  mutate(year.unite = strftime(.$donation.date, format = "%Y")) %>%
+  mutate(month.unite = strftime(.$donation.date, format = "%m")) %>%
+  unite(MY, month.unite, year.unite) %>%
+  group_by(MY, nominal) %>%
+  mutate(sum.donations = sum(donation.amount),
+         average.donations = mean(donation.amount),
+         number.donations = n()) %>%
+  ungroup() %>%
+  gather(index, value, -c(journal.no:donation.year, MY)) %>%
+               filter(donation.date >= input$dateid1[1] & donation.date <= input$dateid1[2],
+                      nominal == input$nominalid,
+                      index == input$graphid)
+
+} else if (!(input$nominalid == "") & !(input$source.group == "") & !(input$source == "")){
+    
+   
   dataset_donations %>%
     select(journal.no, 
          donation.date, 
@@ -212,7 +239,7 @@ reactiveDonations<- reactive({
   mutate(year.unite = strftime(.$donation.date, format = "%Y")) %>%
   mutate(month.unite = strftime(.$donation.date, format = "%m")) %>%
   unite(MY, month.unite, year.unite) %>%
-  group_by(MY, source) %>% 
+  group_by(MY, source.group) %>% 
   mutate(sum.donations = sum(donation.amount), 
          average.donations = mean(donation.amount),
          number.donations = n()) %>%
@@ -221,7 +248,6 @@ reactiveDonations<- reactive({
                filter(donation.date >= input$dateid1[1] & donation.date <= input$dateid1[2],
                       nominal == input$nominalid,
                       source.group == input$source.groupid,
-                      source == input$sourceid,
                       index == input$graphid)
   
 }
