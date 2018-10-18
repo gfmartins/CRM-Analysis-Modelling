@@ -124,7 +124,7 @@ Coord.City <- c(lon = -1.581517, lat = 54.77952)
 SourceCode<- "COLBOX"
 Index<- "sum.donations"
 
-dataset_donations %>%
+p1<- dataset_donations %>%
   select(journal.no, 
          donation.date, 
          nominal, 
@@ -148,11 +148,13 @@ dataset_donations %>%
   ggplot(aes(donation.month, value, group = donation.year, colour = donation.year)) + # In shiny gere goes input$sum, mean...
   geom_line()
   
+ggplotly(p1)
+
 ## Grouped by source.group
 SourceGroup<- "COL"
 Index<- "sum.donations"
 
-dataset_donations %>%
+p1<- dataset_donations %>%
   select(journal.no, 
          donation.date, 
          nominal, 
@@ -176,12 +178,14 @@ dataset_donations %>%
   ggplot(aes(donation.month, value, group = donation.year, colour = donation.year)) + # In shiny gere goes input$sum, mean...
   geom_line()
 
+ggplotly(p1)
+
 
 ## Grouped by nominal
 Nominal<- "4100"
 Index<- "sum.donations"
 
-dataset_donations %>%
+p1<- dataset_donations %>%
   select(journal.no, 
          donation.date, 
          nominal, 
@@ -205,6 +209,7 @@ dataset_donations %>%
   ggplot(aes(donation.month, value, group = donation.year, colour = donation.year)) + # In shiny gere goes input$sum, mean...
   geom_line()
 
+ggplotly(p1)
 
 
 ### Donors
