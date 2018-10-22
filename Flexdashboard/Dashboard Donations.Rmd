@@ -89,12 +89,10 @@ table_RG_details <-
 ### Donations
 ## Import main donations dataset
 dataset_donations <-
-  as.tibble(
-    read_excel(
+      read_excel(
       "~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Support Services/Donations_6Years (nopass).xlsx",
       sheet = "Fernando_6year_3.7.18_1"
-    )
-  ) %>%
+    ) %>%
   rename_all(funs(tolower(make.names(.)))) %>%
   select(-c(address1)) %>%
   ### Source codes, group codes, income stream, regular givers details, main dataset
@@ -191,7 +189,7 @@ selectInput(
 radioButtons(
   inputId = "levelsid",
   label = "Select the Level of Detail of the Graph",
-  choices = c("General", "By Nominal", "By Source Group", "By Source Code")
+  choices = c("By Nominal" = "nominal", "By Source Group" = "source.group", "By Source Code" = "source")
 )
 
 ## Boton to create plot
@@ -217,12 +215,13 @@ observeEvent(input$sourcegroupid, {
   
 })
 
-
 ## Create reactive dataset that will depend on date, nominal, source.group and source code
 
-reactiveDonationsTotal <- reactive({
-  dataset_donations %>%
+reactiveDonations <- reactive({
+
+ data<- dataset_donations %>%
   select(
+  donor.no,
   journal.no,
   donation.date,
   nominal,
@@ -237,128 +236,58 @@ reactiveDonationsTotal <- reactive({
   mutate(year.unite = strftime(.$donation.date, format = "%Y")) %>%
   mutate(month.unite = strftime(.$donation.date, format = "%m")) %>%
   unite(MY, month.unite, year.unite) %>%
-  group_by(MY) %>%
-  mutate(
-  sum.donations = sum(donation.amount),
-  average.donations = mean(donation.amount),
-  number.donations = n()
-  ) %>%
-  ungroup() %>%
-  gather(index, value,-c(journal.no:donation.year, MY)) %>%
-  filter(
-  donation.date >= input$dateid1[1] &
-  donation.date <= input$dateid1[2],
-  index == input$graphid
-  )
+  group_by_at(vars(MY, input$levelsid)) %>%
+    mutate(
+    sum.donations = sum(donation.amount),
+    average.donations = mean(donation.amount),
+    number.donations = n()
+    ) %>%
+    ungroup() %>%
+    gather(index, value, -c(donor.no:donation.year, MY))
+    
+  
+  if (input$levelsid == "nominal") {
+    data2 <- data %>%
+      filter(
+      donation.date >= input$dateid1[1] &
+      donation.date <= input$dateid1[2],
+      index == input$graphid,
+      nominal == input$nominalid
+      )
+
+      return(data2)
+
+
+  } else if (input$levelsid == "source.group") {
+    data2 <- data %>%
+      filter(
+      donation.date >= input$dateid1[1] &
+      donation.date <= input$dateid1[2],
+      nominal == input$nominalid,
+      source.group == input$sourcegroupid,
+      index == input$graphid
+      )
+
+      return(data2)
+
+
+  } else if (input$levelsid == "source") {
+    data2 <- data %>%
+      filter(
+      donation.date >= input$dateid1[1] &
+      donation.date <= input$dateid1[2],
+      nominal == input$nominalid,
+      source.group == input$sourcegroupid,
+      source == input$sourceid,
+      index == input$graphid
+      )
+
+      return(data2)
+
+  }
   
 })
 
-
-reactiveDonationsNominal <- reactive({
-  dataset_donations %>%
-  select(
-  journal.no,
-  donation.date,
-  nominal,
-  source.group,
-  source,
-  donation.day,
-  donation.week,
-  donation.month,
-  donation.year,
-  donation.amount
-  ) %>%
-  mutate(year.unite = strftime(.$donation.date, format = "%Y")) %>%
-  mutate(month.unite = strftime(.$donation.date, format = "%m")) %>%
-  unite(MY, month.unite, year.unite) %>%
-  group_by(MY, nominal) %>%
-  mutate(
-  sum.donations = sum(donation.amount),
-  average.donations = mean(donation.amount),
-  number.donations = n()
-  ) %>%
-  ungroup() %>%
-  gather(index, value,-c(journal.no:donation.year, MY)) %>%
-  filter(
-  donation.date >= input$dateid1[1] &
-  donation.date <= input$dateid1[2],
-  index == input$graphid,
-  nominal == input$nominalid
-  )
-  
-})
-
-reactiveDonationsSourceGroup <- reactive({
-  dataset_donations %>%
-  select(
-  journal.no,
-  donation.date,
-  nominal,
-  source.group,
-  source,
-  donation.day,
-  donation.week,
-  donation.month,
-  donation.year,
-  donation.amount
-  ) %>%
-  mutate(year.unite = strftime(.$donation.date, format = "%Y")) %>%
-  mutate(month.unite = strftime(.$donation.date, format = "%m")) %>%
-  unite(MY, month.unite, year.unite) %>%
-  group_by(MY, source.group) %>%
-  mutate(
-  sum.donations = sum(donation.amount),
-  average.donations = mean(donation.amount),
-  number.donations = n()
-  ) %>%
-  ungroup() %>%
-  gather(index, value, -c(journal.no:donation.year, MY)) %>%
-  filter(
-  donation.date >= input$dateid1[1] &
-  donation.date <= input$dateid1[2],
-  nominal == input$nominalid,
-  source.group == input$sourcegroupid,
-  index == input$graphid
-  )
-  
-})
-
-
-reactiveDonationsSource <- reactive({
-  dataset_donations %>%
-  select(
-  journal.no,
-  donation.date,
-  nominal,
-  source.group,
-  source,
-  donation.day,
-  donation.week,
-  donation.month,
-  donation.year,
-  donation.amount
-  ) %>%
-  mutate(year.unite = strftime(.$donation.date, format = "%Y")) %>%
-  mutate(month.unite = strftime(.$donation.date, format = "%m")) %>%
-  unite(MY, month.unite, year.unite) %>%
-  group_by(MY, source) %>% # In shiny gere goes input$Nominal, source...
-  mutate(
-  sum.donations = sum(donation.amount),
-  average.donations = mean(donation.amount),
-  number.donations = n()
-  ) %>%
-  ungroup() %>%
-  gather(index, value,-c(journal.no:donation.year, MY)) %>%
-  filter(
-  donation.date >= input$dateid1[1] &
-  donation.date <= input$dateid1[2],
-  nominal == input$nominalid,
-  source.group == input$sourcegroupid,
-  source == input$sourceid,
-  index == input$graphid
-  )
-  
-})
 
 ```
 
@@ -368,352 +297,181 @@ column {data-width=700}
 ### Plot
 
 ```{r}
+
 renderPlotly({
   req(input$actionid1)
-  if (input$levelsid == "By Nominal") {
-  ggplotly(isolate(reactiveDonationsNominal()) %>%
+  ggplotly(isolate(reactiveDonations()) %>%
   ggplot(
-  aes(
-  donation.month,
+  aes(donation.month,
   value,
   group = donation.year,
-  colour = donation.year
-  )
+  colour = donation.year)
   ) +
   geom_line())
-  } else if ((input$levelsid == "By Source Group")) {
-  ggplotly(isolate(reactiveDonationsSourceGroup()) %>%
-  ggplot(
-  aes(
-  donation.month,
-  value,
-  group = donation.year,
-  colour = donation.year
-  )
-  ) +
-  geom_line())
-  } else if ((input$levelsid == "By Source Code")) {
-  ggplotly(isolate(reactiveDonationsSource()) %>%
-  ggplot(
-  aes(
-  donation.month,
-  value,
-  group = donation.year,
-  colour = donation.year
-  )
-  ) +
-  geom_line())
-  } else if ((input$levelsid == "General")) {
-  ggplotly(isolate(reactiveDonationsTotal()) %>%
-  ggplot(
-  aes(
-  donation.month,
-  value,
-  group = donation.year,
-  colour = donation.year
-  )
-  ) +
-  geom_line())
-  }
 })
-
 ```
 
 
 
-Donors {data-width=700}
-====================
+<!-- Donors {data-width=700} -->
+<!-- ==================== -->
 
-Sidebar {.sidebar}
------------------
+<!-- Sidebar {.sidebar} -->
+<!-- ----------------- -->
 
-<br>
+<!-- <br> -->
 
-```{r}
-
-
-## Select input to select graph
-selectInput(
-  inputId = "graphid2",
-  label = "Select the Graph to Display",
-  choices =  c("Total Donors" = "donors.per.month", "New Donors" = "sum.new.donors"),
-  multiple = FALSE
-)
-
-# Date input
-dateRangeInput(
-  inputId = "dateid2",
-  label = "Select dates",
-  start = "2017-04-01",
-  end = Sys.Date(),
-  min = "2015-01-01",
-  max = Sys.Date(),
-  startview = "year"
-  )
-  
-
-# Selection input of nominal code
-selectInput(
-  inputId = "nominalid2",
-  label = "Select the Nominal Code",
-  choices = c("", levels(dataset_donations$nominal)),
-  multiple = FALSE
-  )
-  
-# Selection input of source group code
-selectInput(
-  inputId = "sourcegroupid2",
-  label = "Select the Source Group Code",
-  choices = NULL,
-  multiple = FALSE
-  )
-  
-# Selection input of source code
-selectInput(
-  inputId = "sourceid2",
-  label = "Select the Source Code",
-  choices = NULL,
-  multiple = FALSE
-  )
-  
-radioButtons(
-  inputId = "levelsid2",
-  label = "Select the Level of Detail of the Graph",
-  choices = c("General", "By Nominal", "By Source Group", "By Source Code")
-  )
-  
-## Boton to create plot
-actionButton(inputId = "actionid2",
-             label = "Clic to Generate Graph")
-
-## Code for making the source.group and source input depend on the nominal code
-observeEvent(input$nominalid2, {
-  filtered_donations2 <- dataset_donations %>%
-  filter(nominal == input$nominalid2, in.use == "Y") %>%
-  distinct(source.group)
-  
-  updateSelectInput(session, "sourcegroupid2", choices = c(filtered_donations2))
-  
-})
-
-observeEvent(input$sourcegroupid2, {
-  filtered_donations2 <- dataset_donations %>%
-  filter(source.group == input$sourcegroupid2, in.use == "Y") %>%
-  distinct(source)
-  
-  updateSelectInput(session, "sourceid2", choices = c(filtered_donations2))
-  
-})
+<!-- ```{r} -->
 
 
-## Create reactive dataset that will depend on date, nominal, source.group and source code
+<!-- ## Select input to select graph -->
+<!-- selectInput( -->
+<!--   inputId = "graphid2", -->
+<!--   label = "Select the Graph to Display", -->
+<!--   choices =  c("Total Donors" = "donors.per.month", "New Donors" = "sum.new.donors"), -->
+<!--   multiple = FALSE -->
+<!-- ) -->
 
-reactiveDonorsTotal <- reactive({
-  dataset_donations %>%
-  select(
-  journal.no,
-  donation.date,
-  nominal,
-  source.group,
-  source,
-  donation.day,
-  donation.week,
-  donation.month,
-  donation.year,
-  donor.no
-  ) %>%
-  mutate(year.unite = strftime(.$donation.date, format = "%Y")) %>%
-  mutate(month.unite = strftime(.$donation.date, format = "%m")) %>%
-  unite(MY, month.unite, year.unite) %>%
-  # group_by(donor.no) %>%
-  # ungroup() %>%
-  group_by(nominal, donor.no) %>% # In shiny gere goes input$Nominal, source...
-  mutate(donations.per.donor = n()) %>%
-  ungroup() %>%
-  # gather(index, value, -c(journal.no:donation.year, MY)) %>%
-  filter(donations.per.donor == 1) %>%
-  group_by(MY, source.group) %>%
-  mutate(sum.new.donors = n()) %>%
-  ungroup() %>%
-  filter(
-  donation.date >= input$dateid2[1] &
-  donation.date <= input$dateid2[2],
-  index == input$graphid2
-  )
-  
-})
+<!-- # Date input -->
+<!-- dateRangeInput( -->
+<!--   inputId = "dateid2", -->
+<!--   label = "Select dates", -->
+<!--   start = "2017-04-01", -->
+<!--   end = Sys.Date(), -->
+<!--   min = "2015-01-01", -->
+<!--   max = Sys.Date(), -->
+<!--   startview = "year" -->
+<!--   ) -->
 
+<!-- # Selection input of nominal code -->
+<!-- selectInput( -->
+<!--   inputId = "nominalid2", -->
+<!--   label = "Select the Nominal Code", -->
+<!--   choices = c("", levels(dataset_donations$nominal)), -->
+<!--   multiple = FALSE -->
+<!--   ) -->
 
-reactiveDonorsNominal <- reactive({
-  dataset_donations %>%
-  select(
-  journal.no,
-  donation.date,
-  nominal,
-  source.group,
-  source,
-  donation.day,
-  donation.week,
-  donation.month,
-  donation.year,
-  donor.no
-  ) %>%
-  mutate(year.unite = strftime(.$donation.date, format = "%Y")) %>%
-  mutate(month.unite = strftime(.$donation.date, format = "%m")) %>%
-  unite(MY, month.unite, year.unite) %>%
-  # group_by(donor.no) %>%
-  # ungroup() %>%
-  group_by(nominal, donor.no) %>% # In shiny gere goes input$Nominal, source...
-  mutate(donations.per.donor = n()) %>%
-  ungroup() %>%
-  # gather(index, value, -c(journal.no:donation.year, MY)) %>%
-  filter(donations.per.donor == 1) %>%
-  group_by(MY, nominal) %>%
-  mutate(sum.new.donors = n()) %>%
-  ungroup() %>%
-  filter(
-  donation.date >= input$dateid2[1] &
-  donation.date <= input$dateid2[2],
-  index == input$graphid2,
-  nominal == input$nominalid2
-  )
-  
-})
+<!-- # Selection input of source group code -->
+<!-- selectInput( -->
+<!--   inputId = "sourcegroupid2", -->
+<!--   label = "Select the Source Group Code", -->
+<!--   choices = NULL, -->
+<!--   multiple = FALSE -->
+<!--   ) -->
 
-reactiveDonorsSourceGroup <- reactive({
-  dataset_donations %>%
-  select(
-  journal.no,
-  donation.date,
-  nominal,
-  source.group,
-  source,
-  donation.day,
-  donation.week,
-  donation.month,
-  donation.year,
-  donor.no
-  ) %>%
-  mutate(year.unite = strftime(.$donation.date, format = "%Y")) %>%
-  mutate(month.unite = strftime(.$donation.date, format = "%m")) %>%
-  unite(MY, month.unite, year.unite) %>%
-  # group_by(donor.no) %>%
-  # ungroup() %>%
-  group_by(source.group, donor.no) %>% # In shiny gere goes input$Nominal, source...
-  mutate(donations.per.donor = n()) %>%
-  ungroup() %>%
-  # gather(index, value, -c(journal.no:donation.year, MY)) %>%
-  filter(donations.per.donor == 1) %>%
-  group_by(MY, source.group) %>%
-  mutate(sum.new.donors = n()) %>%
-  ungroup() %>%
-  filter(
-  donation.date >= input$dateid2[1] &
-  donation.date <= input$dateid2[2],
-  nominal == input$nominalid2,
-  source.group == input$sourcegroupid2,
-  index == input$graphid2
-  )
-  
-})
+<!-- # Selection input of source code -->
+<!-- selectInput( -->
+<!--   inputId = "sourceid2", -->
+<!--   label = "Select the Source Code", -->
+<!--   choices = NULL, -->
+<!--   multiple = FALSE -->
+<!--   ) -->
+
+<!-- radioButtons( -->
+<!--   inputId = "levelsid2", -->
+<!--   label = "Select the Level of Detail of the Graph", -->
+<!--   choices = c("By Nominal", "By Source Group", "By Source Code") -->
+<!--   ) -->
+
+<!-- ## Boton to create plot -->
+<!-- actionButton(inputId = "actionid2", -->
+<!--              label = "Clic to Generate Graph") -->
 
 
-reactiveDonorsSource <- reactive({
-  dataset_donations %>%
-  select(
-  journal.no,
-  donation.date,
-  nominal,
-  source.group,
-  source,
-  donation.day,
-  donation.week,
-  donation.month,
-  donation.year,
-  donor.no
-  ) %>%
-  mutate(year.unite = strftime(.$donation.date, format = "%Y")) %>%
-  mutate(month.unite = strftime(.$donation.date, format = "%m")) %>%
-  unite(MY, month.unite, year.unite) %>%
-  # group_by(donor.no) %>%
-  # ungroup() %>%
-  group_by(source.group, donor.no) %>% # In shiny gere goes input$Nominal, source...
-  mutate(donations.per.donor = n()) %>%
-  ungroup() %>%
-  # gather(index, value, -c(journal.no:donation.year, MY)) %>%
-  filter(donations.per.donor == 1) %>%
-  group_by(MY, source.group) %>%
-  mutate(sum.new.donors = n()) %>%
-  ungroup() %>%
-  filter(
-  donation.date >= input$dateid2[1] &
-  donation.date <= input$dateid2[2],
-  nominal == input$nominalid2,
-  source.group == input$sourcegroupid2,
-  source == input$sourceid2,
-  index == input$graphid2
-  )
-  
-})
+<!-- ## Code for making the source.group and source input depend on the nominal code -->
+<!-- observeEvent(input$nominalid2, { -->
+<!--   filtered_donations2 <- dataset_donations %>% -->
+<!--   filter(nominal == input$nominalid2, in.use == "Y") %>% -->
+<!--   distinct(source.group) -->
 
-```
+<!--   updateSelectInput(session, "sourcegroupid2", choices = c(filtered_donations2)) -->
 
-column {data-width=700}
-----------------------
+<!-- }) -->
 
-### Plot
+<!-- observeEvent(input$sourcegroupid2, { -->
+<!--   filtered_donations2 <- dataset_donations %>% -->
+<!--   filter(source.group == input$sourcegroupid2, in.use == "Y") %>% -->
+<!--   distinct(source) -->
 
-```{r}
-renderPlotly({
-  req(input$actionid2)
-  if (input$levelsid2 == "By Nominal") {
-  ggplotly(isolate(reactiveDonorsNominal()) %>%
-  ggplot(
-  aes(
-  donation.month,
-  sum.new.donors,
-  group = donation.year,
-  colour = donation.year
-  )
-  ) +
-  geom_line())
-  } else if ((input$levelsid2 == "By Source Group")) {
-  ggplotly(isolate(reactiveDonorsSourceGroup()) %>%
-  ggplot(
-  aes(
-  donation.month,
-  sum.new.donors,
-  group = donation.year,
-  colour = donation.year
-  )
-  ) +
-  geom_line())
-  } else if ((input$levelsid2 == "By Source Code")) {
-  ggplotly(isolate(reactiveDonorsSource()) %>%
-  ggplot(
-  aes(
-  donation.month,
-  sum.new.donors,
-  group = donation.year,
-  colour = donation.year
-  )
-  ) +
-  geom_line())
-  } else if ((input$levelsid2 == "General")) {
-  ggplotly(isolate(reactiveDonorsTotal()) %>%
-  ggplot(
-  aes(
-  donation.month,
-  sum.new.donors,
-  group = donation.year,
-  colour = donation.year
-  )
-  ) +
-  geom_line())
-  }
-})
+<!--   updateSelectInput(session, "sourceid2", choices = c(filtered_donations2)) -->
 
-```
+<!-- }) -->
+
+
+<!-- dataset_donors_base <- dataset_donations %>% -->
+<!--   select( -->
+<!--   journal.no, -->
+<!--   donation.date, -->
+<!--   nominal, -->
+<!--   source.group, -->
+<!--   source, -->
+<!--   donation.day, -->
+<!--   donation.week, -->
+<!--   donation.month, -->
+<!--   donation.year, -->
+<!--   donor.no -->
+<!--   ) %>% -->
+<!--   mutate(year.unite = strftime(.$donation.date, format = "%Y")) %>% -->
+<!--   mutate(month.unite = strftime(.$donation.date, format = "%m")) %>% -->
+<!--   unite(MY, month.unite, year.unite)  -->
+
+<!-- ## Create reactive dataset that will depend on date, nominal, source.group and source code -->
+
+<!-- reactiveDonorsNominal <- reactive({ -->
+<!--  dataDon<- dataset_donors_base %>%  -->
+<!--      group_by(nominal, donor.no) -->
+
+<!--  if (input$graphid2 == "New Donors"){ -->
+
+<!--   DataDon2<- dataDon %>% mutate(donations.per.donor = n()) %>% -->
+<!--   ungroup() %>% -->
+<!--   # gather(index, value, -c(journal.no:donation.year, MY)) %>% -->
+<!--   filter(donations.per.donor == 1) %>% -->
+<!--   group_by(MY, nominal) %>% -->
+<!--   mutate(sum.new.donors = n()) %>% -->
+<!--   ungroup()  -->
+
+<!--   return(DataDon2) -->
+
+<!--  } else if (input$graphid2 == "Total Donors"){ -->
+<!--   distinct(donor.no, .keep_all = TRUE) %>% -->
+<!--   mutate(donors.per.month = n()) %>% -->
+<!--   ungroup()  -->
+
+<!--   return(DataDon2) -->
+
+<!--  } -->
+<!-- }) -->
+
+<!-- # reactiveDonorsSourceGroup <- reactive({ -->
+<!-- #  -->
+<!-- # }) -->
+<!-- # reactiveDonorsSource <- reactive({ -->
+<!-- #  -->
+<!-- # }) -->
+
+<!-- ``` -->
+
+<!-- column {data-width=700} -->
+<!-- ---------------------- -->
+
+<!-- ### Plot -->
+
+<!-- ```{r} -->
+<!-- renderPlotly({ -->
+<!--   req(input$actionid2) -->
+<!--    ggplotly(isolate(reactiveDonorsNominal()) %>% -->
+<!--   ggplot(aes( -->
+<!--     donation.month, -->
+<!--     sum.new.donors, -->
+<!--     group = donation.year, -->
+<!--     colour = donation.year -->
+<!--   )) + # In shiny gere goes input$sum, mean... -->
+<!--   geom_line()) -->
+
+<!--   }) -->
+
+<!-- ``` -->
 
 
 
