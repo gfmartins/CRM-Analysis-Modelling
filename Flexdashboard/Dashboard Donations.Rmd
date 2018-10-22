@@ -215,11 +215,7 @@ observeEvent(input$sourcegroupid, {
   
 })
 
-## Create reactive dataset that will depend on date, nominal, source.group and source code
-
-reactiveDonations <- reactive({
-
- data<- dataset_donations %>%
+dataset_donations_base<- dataset_donations %>%
   select(
   donor.no,
   journal.no,
@@ -235,7 +231,13 @@ reactiveDonations <- reactive({
   ) %>%
   mutate(year.unite = strftime(.$donation.date, format = "%Y")) %>%
   mutate(month.unite = strftime(.$donation.date, format = "%m")) %>%
-  unite(MY, month.unite, year.unite) %>%
+  unite(MY, month.unite, year.unite) 
+
+## Create reactive objects that will depend on date, nominal, source.group and source code
+
+reactiveDonations <- reactive({
+
+ data<- dataset_donations_base %>% 
   group_by_at(vars(MY, input$levelsid)) %>%
     mutate(
     sum.donations = sum(donation.amount),
@@ -245,9 +247,11 @@ reactiveDonations <- reactive({
     ungroup() %>%
     gather(index, value, -c(donor.no:donation.year, MY))
     
-  
+})
+
+  reactiveDonationsFiltered<- reactive({
   if (input$levelsid == "nominal") {
-    data2 <- data %>%
+  reactiveDonations() %>%
       filter(
       donation.date >= input$dateid1[1] &
       donation.date <= input$dateid1[2],
@@ -255,11 +259,9 @@ reactiveDonations <- reactive({
       nominal == input$nominalid
       )
 
-      return(data2)
-
 
   } else if (input$levelsid == "source.group") {
-    data2 <- data %>%
+   reactiveDonations() %>%
       filter(
       donation.date >= input$dateid1[1] &
       donation.date <= input$dateid1[2],
@@ -268,11 +270,9 @@ reactiveDonations <- reactive({
       index == input$graphid
       )
 
-      return(data2)
-
 
   } else if (input$levelsid == "source") {
-    data2 <- data %>%
+ reactiveDonations() %>%
       filter(
       donation.date >= input$dateid1[1] &
       donation.date <= input$dateid1[2],
@@ -281,9 +281,6 @@ reactiveDonations <- reactive({
       source == input$sourceid,
       index == input$graphid
       )
-
-      return(data2)
-
   }
   
 })
@@ -300,7 +297,7 @@ column {data-width=700}
 
 renderPlotly({
   req(input$actionid1)
-  ggplotly(isolate(reactiveDonations()) %>%
+  ggplotly((reactiveDonationsFiltered()) %>%
   ggplot(
   aes(donation.month,
   value,
