@@ -112,54 +112,75 @@ dataset_donations <-
   )
 
 
-# # Geo dataset
-# 
-# # Import UK postcodes table (open data)
-# table_postcodes <-
-#   read_csv(
-#     "~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Support Services/ukpostcodes.csv"
-#   ) %>%
-#   rename_all(funs(tolower(make.names(.)))) %>%
-#   rename_all(funs(gsub("_", ".", .))) %>%
-#   select(postcode, latitude, longitude)
-# 
-# # Import events Postcode and join it with UK postcodes to get the longitud and latitude
-# table_events_postcodes <-
-#   read_excel(
-#     "~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Support Services/Events Postcodes.xlsx",
-#     skip = 1
-#   ) %>%
-#   rename_all(funs(tolower(make.names(.)))) %>%
-#   rename_all(funs(gsub("_", ".", .))) %>%
-#   inner_join(table_postcodes, by = "postcode") %>%
-#   select(
-#     source,
-#     event.postcode = postcode,
-#     event.latitude = latitude,
-#     event.longitude = longitude
-#   )
-# 
-# 
-# # Import retail Postcode and join it with UK postcodes to get the longitud and latitude
-# table_retail_postcodes <-
-#   read_excel(
-#     "~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Support Services/Retail Postcodes.xlsx",
-#     skip = 1
-#   ) %>%
-#   rename_all(funs(tolower(make.names(.)))) %>%
-#   rename_all(funs(gsub("_", ".", .))) %>%
-#   inner_join(table_postcodes, by = "postcode") %>%
-#   select(type,
-#          retail.postcode = postcode,
-#          date.opened,
-#          reatail.latitude,
-#          reatail.longitude)
-# 
-# 
-# # Include postcodes of donations and events into main dataset
-# dataset_donations <- dataset_donations %>%
-#   left_join(table_postcodes, by = "postcode") %>%
-#   left_join(table_events_postcodes, by = "source")
+# IPU, CS dataset
+
+dataset_oacc<- read_excel("~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Cinical Services 2015 - 13.06.2018/New Format Datasets/OACC_dataset.xlsx") %>%
+  rename_all(funs(tolower(make.names(.)))) %>%
+  rename_all(funs(gsub("_", ".", .))) %>%
+  mutate_at(vars(q2.pain:q9.practical.matters.addressed, quality.of.life.before.admission.to.spct:lost.control), funs(as.numeric)) %>%
+  mutate_if(is.character, funs(as.factor)) %>% 
+  mutate_at(vars(anonymous.patient.id), funs(as.factor)) %>%
+  mutate_at(vars(date.of.contact), funs(as.Date)) %>%
+  group_by(date.of.contact) %>%
+  mutate(mean.age = round(mean(patient.age),0)) %>%
+  select(anonymous.patient.id, spell, date.of.contact) %>%
+  ungroup()
+
+### IPU
+## Import IPU dataset
+dataset_ipu<- read_excel("~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Cinical Services 2015 - 13.06.2018/New Format Datasets/IPU_dataset.xlsx") %>%
+  rename_all(funs(tolower(make.names(.)))) %>%
+  rename_all(funs(gsub("_", ".", .))) %>%
+  mutate_if(is.character, funs(as.factor)) %>%
+  mutate_at(vars(nhs.number), funs(as.factor)) %>%
+  mutate_at(vars(date.of.admission..dd.mm.yyyy.), funs(as.Date)) %>% 
+  select(nhs.number, spell, date.of.admission..dd.mm.yyyy., postcode)
+
+### IPU, OACC
+## Join datasets IPU and OACC
+dataset_ipu_oacc<- dataset_oacc %>%
+  left_join(dataset_ipu, by = c("anonymous.patient.id" =  "nhs.number", "spell"))
+
+
+# Geo dataset
+
+## Import UK postcodes table (open data)
+table_postcodes <-
+  read_csv(
+    "~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Support Services/ukpostcodes.csv"
+  ) %>%
+  rename_all(funs(tolower(make.names(.)))) %>%
+  rename_all(funs(gsub("_", ".", .))) %>%
+  select(postcode, latitude, longitude)
+
+## Join IPU, CS data with UK postcodes to get the longitud and latitude
+table_CS_postcodes <-
+  dataset_ipu_oacc %>%
+  inner_join(table_postcodes, by = "postcode") 
+
+
+# Include postcodes of donations and IPU/CS patients into main dataset
+dataset_donations_postcode_ipu <- dataset_donations %>%
+  left_join(table_postcodes, by = c("donor.postcode" = "postcode")) %>%
+  full_join(table_CS_postcodes, by = c("donor.postcode" = "postcode")) %>%
+  select(donor.no, 
+         anonymous.patient.id, 
+         donor.postcode, 
+         latitude.x, longitude.x, 
+         latitude.y, longitude.y) %>% 
+  mutate_if(is.factor, funs(as.character)) %>% 
+  replace_na(list(donor.no = "noMatch", anonymous.patient.id = "noMatch")) %>% 
+  mutate(nueva_columna = case_when(donor.no == "no match" ~ "justPatient",
+                                   anonymous.patient.id == "noMatch" ~ "justDonor",
+                                   !anonymous.patient.id == "noMatch" ~ "bothDonorAndPatient")) %>% 
+  mutate(latutude = case_when(anonymous.patient.id == "no match" ~ latitude.x,
+                              anonymous.patient.id == "no match" ~ longitude.x))
+  
+
+
+remove(table_postcodes)
+
+
 
 # # Save the coordinates of a city in a vector (search in google )
 # ### In this case Durham
@@ -280,7 +301,7 @@ ggplotly(p1)
 # New Donors
 
 ## Filter by nominal
-Nominal <- "COL"
+Nominal <- "4100"
 
 plot1 <- dataset_donations %>%
   select(
@@ -321,7 +342,7 @@ ggplotly(plot1)
 
 
 ## Filter by source.group
-SourceGroup <- "DOG"
+SourceGroup <- "COL"
 
 plot1 <- dataset_donations %>%
   select(
@@ -479,9 +500,11 @@ p1 <- dataset_donations %>%
 
 ggplotly(p1)
 
-## No source grouping
+## Grouped by source.group
 
-dataset_donations %>%
+Source <- "COLBOX"
+
+p1 <- dataset_donations %>%
   select(
     journal.no,
     donation.date,
@@ -499,19 +522,26 @@ dataset_donations %>%
   unite(MY, month.unite, year.unite) %>%
   # group_by(donor.no) %>%
   # ungroup() %>%
-  group_by(MY) %>% # In shiny gere goes input$Nominal, source...
+  group_by(MY, source) %>% # In shiny gere goes input$Nominal, source...
   distinct(donor.no, .keep_all = TRUE) %>%
-  mutate(donations.per.month = n()) %>%
+  mutate(donors.per.month = n()) %>%
   ungroup() %>%
+  filter(source == Source) %>% # In Shiny source = input$grouping variable
   ggplot(
     aes(
       donation.month,
-      donations.per.month,
+      donors.per.month,
       group = donation.year,
       colour = donation.year
     )
   ) + # In shiny gere goes input$sum, mean...
   geom_line()
+
+ggplotly(p1)
+
+
+################# Geo Data ################# 
+
 
 
 ################# Try this for ML #################
