@@ -15,15 +15,16 @@ runApp: showcase
 
 library(tidyverse)
 library(readxl)
-# library(ggthemes)
+library(ggthemes)
 # library(astsa)
 # library(forecast)
 # library(xts)
 # library(aspace)
 # library(forecast)
 # library(data.table)
-# library(leaflet)
+library(leaflet)
 library(plotly)
+
 
 ########################  Import data ########################
 
@@ -38,7 +39,6 @@ table_group_codes <-
   select(-Recnum) %>%
   rename_all(funs(tolower(make.names(.)))) %>%
   rename_all(funs(gsub("_", ".", .)))
-
 
 
 ### Source codes, group codes
@@ -57,6 +57,7 @@ table_source_codes <-
   left_join(table_group_codes, by = "source.group") %>%
   mutate_if(is.character, funs(as.factor))
 
+
 ### Source codes, group codes, nominal descriptions
 ## Import table with nominal descriptions and join with source/group codes
 table_nominal_descriptions <-
@@ -67,6 +68,7 @@ table_nominal_descriptions <-
   mutate_all(funs(as.factor)) %>%
   left_join(table_source_codes, by = c("nominal.codes" = "nominal.ledger"))
 
+
 ### Income stream codes
 ## Import Income Stream table
 table_income_stream <-
@@ -75,6 +77,7 @@ table_income_stream <-
     skip = 1
   ) %>%
   rename_all(funs(tolower(make.names(.))))
+
 
 ### Regular donors details
 ## Import Regular Givers details
@@ -85,6 +88,7 @@ table_RG_details <-
   rename_all(funs(tolower(make.names(.)))) %>%
   select(-c(start.date, terminated.on)) %>%
   mutate_at(vars(frequency), funs(as.factor))
+
 
 ### Donations
 ## Import main donations dataset
@@ -123,6 +127,81 @@ dataset_donations <-
     everything()
   )
 
+# IPU, CS dataset
+
+dataset_oacc<- read_excel("~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Cinical Services 2015 - 13.06.2018/New Format Datasets/OACC_dataset.xlsx") %>%
+  rename_all(funs(tolower(make.names(.)))) %>%
+  rename_all(funs(gsub("_", ".", .))) %>%
+  mutate_at(vars(q2.pain:q9.practical.matters.addressed, quality.of.life.before.admission.to.spct:lost.control), funs(as.numeric)) %>%
+  mutate_if(is.character, funs(as.factor)) %>% 
+  mutate_at(vars(anonymous.patient.id), funs(as.factor)) %>%
+  mutate_at(vars(date.of.contact), funs(as.Date)) %>%
+  group_by(date.of.contact) %>%
+  mutate(mean.age = round(mean(patient.age),0)) %>%
+  select(anonymous.patient.id, spell, date.of.contact) %>%
+  ungroup()
+
+### IPU
+## Import IPU dataset
+dataset_ipu<- read_excel("~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Cinical Services 2015 - 13.06.2018/New Format Datasets/IPU_dataset.xlsx") %>%
+  rename_all(funs(tolower(make.names(.)))) %>%
+  rename_all(funs(gsub("_", ".", .))) %>%
+  mutate_if(is.character, funs(as.factor)) %>%
+  mutate_at(vars(nhs.number), funs(as.factor)) %>%
+  mutate_at(vars(date.of.admission..dd.mm.yyyy.), funs(as.Date)) %>% 
+  select(nhs.number, spell, date.of.admission..dd.mm.yyyy., postcode)
+
+### IPU, OACC
+## Join datasets IPU and OACC
+dataset_ipu_oacc<- dataset_oacc %>%
+  left_join(dataset_ipu, by = c("anonymous.patient.id" =  "nhs.number", "spell"))
+
+
+# Geo dataset
+
+## Import UK postcodes table (open data)
+table_postcodes <-
+  read_csv(
+    "~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Support Services/ukpostcodes.csv"
+  ) %>%
+  rename_all(funs(tolower(make.names(.)))) %>%
+  rename_all(funs(gsub("_", ".", .))) %>%
+  select(postcode, latitude, longitude)
+
+## Join IPU, CS data with UK postcodes to get the longitud and latitude
+table_CS_postcodes <-
+  dataset_ipu_oacc %>%
+  inner_join(table_postcodes, by = "postcode") 
+
+
+# Include postcodes of donations and IPU/CS patients into main dataset
+dataset_donations_postcode_ipu <- dataset_donations %>%
+  left_join(table_postcodes, by = c("donor.postcode" = "postcode")) %>%
+  full_join(table_CS_postcodes, by = c("donor.postcode" = "postcode")) %>%
+  select(donor.no, 
+         anonymous.patient.id, 
+         donor.postcode, 
+         latitude.x, longitude.x, 
+         latitude.y, longitude.y) %>% 
+  mutate_if(is.factor, funs(as.character)) %>% 
+  replace_na(list(donor.no = "noMatch", anonymous.patient.id = "noMatch")) %>% 
+  mutate(owner.of.postcode = case_when(donor.no == "no match" ~ "justPatient",
+                                   anonymous.patient.id == "noMatch" ~ "justDonor",
+                                   !anonymous.patient.id == "noMatch" ~ "bothDonorAndPatient"),
+         latitude = coalesce(latitude.x, latitude.y),
+         longitude = coalesce(longitude.x, longitude.y),
+         copy.long = longitude,
+         copy.lat = latitude) %>% 
+  unite(long.lat, copy.long, copy.lat) %>% 
+  distinct(long.lat, .keep_all = TRUE)  %>% 
+  mutate_at(vars(owner.of.postcode), funs(as.factor)) %>% 
+  select(latitude,
+         longitude,
+         owner.of.postcode)
+  
+remove(table_postcodes)
+
+
 ```
 
 
@@ -156,7 +235,7 @@ dateRangeInput(
   label = "Select dates",
   start = "2017-04-01",
   end = Sys.Date(),
-  min = "2015-01-01",
+  min = "2011-01-01",
   max = Sys.Date(),
   startview = "year"
 )
@@ -304,7 +383,14 @@ renderPlotly({
   group = donation.year,
   colour = donation.year)
   ) +
-  geom_line())
+  geom_line(alpha = 0.7, size = 1) +
+    theme_economist_white() +
+  scale_colour_economist() + 
+  labs(x = "Date", 
+       y = "Value",
+       colour = "") +
+  theme(legend.position = "right", text = element_text(family = "Tahoma"), plot.background = element_rect(fill = "white"), plot.margin=unit(c(1,2.5,2,2.5),"cm"))
+  )
 })
 ```
 
@@ -335,7 +421,7 @@ dateRangeInput(
   label = "Select dates",
   start = "2017-04-01",
   end = Sys.Date(),
-  min = "2015-01-01",
+  min = "2011-01-01",
   max = Sys.Date(),
   startview = "year"
   )
@@ -372,7 +458,7 @@ radioButtons(
 
 ## Boton to create plot
 actionButton(inputId = "actionid2",
-             label = "Clic to Generate Graph")
+             label = "Clic to Initiate Graph")
 
 ## Code for making the source.group and source input depend on the nominal code
 observeEvent(input$nominalid2, {
@@ -438,23 +524,23 @@ reactiveTotalDonorsFiltered<- reactive({
 
 
 
-reactiveNewDonors <- reactive({
-dataset_donations_base %>%
-  group_by_at(vars(source.group, donor.no)) %>% # In shiny gere goes input$Nominal, source...
-  mutate(donations.per.donor = n()) %>%
-  ungroup() %>%
-  filter(donations.per.donor == 1) %>%
-  group_by(MY, source.group) %>%
-  mutate(sum.new.donors = n()) %>%
-  ungroup() %>%
-      filter(
-      donation.date >= input$dateid2[1] &
-      donation.date <= input$dateid2[2],
-      nominal == input$nominalid2,
-      source.group == input$sourcegroupid2
-      )
-
-  })
+# reactiveNewDonors <- reactive({
+# dataset_donations_base %>%
+#   group_by_at(vars(source.group, donor.no)) %>% # In shiny gere goes input$Nominal, source...
+#   mutate(donations.per.donor = n()) %>%
+#   ungroup() %>%
+#   filter(donations.per.donor == 1) %>%
+#   group_by(MY, source.group) %>%
+#   mutate(sum.new.donors = n()) %>%
+#   ungroup() %>%
+#       filter(
+#       donation.date >= input$dateid2[1] &
+#       donation.date <= input$dateid2[2],
+#       nominal == input$nominalid2,
+#       source.group == input$sourcegroupid2
+#       )
+# 
+#   })
 
 ```
 
@@ -477,30 +563,57 @@ renderPlotly({
   colour = donation.year
   )
   ) +
-  geom_line()
+  geom_line(alpha = 0.7, size = 1) +
+    theme_economist_white() +
+  scale_colour_economist() + 
+  labs(x = "Date", 
+       y = "Value",
+       colour = "") +
+  theme(legend.position = "right", text = element_text(family = "Tahoma"), plot.background = element_rect(fill = "white"), plot.margin=unit(c(1,2.5,2,2.5),"cm"))
   )
-    
-  } else if (input$graphid2 == "sum.new.donors") {
-  ggplotly(
-  reactiveNewDonorsFiltered() %>%
-  ggplot(
-  aes(
-  donation.month,
-  sum.new.donors,
-  group = donation.year,
-  colour = donation.year
-  )
-  ) +
-  geom_line()
-  )
-    
-  }
+  } 
 })
+
+# } else if (input$graphid2 == "sum.new.donors") {
+  # ggplotly(
+  # reactiveNewDonorsFiltered() %>%
+  # ggplot(
+  # aes(
+  # donation.month,
+  # sum.new.donors,
+  # group = donation.year,
+  # colour = donation.year
+  # )
+  # ) +
+  # geom_line()
+  # )
+  #   
+  # }
 
 ```
 
 
+GeoData {data-width=700}
+====================
 
+### Postcodes of Donations and IPU Patients
+
+```{r}
+pal <- colorFactor(
+  palette = c('red', 'blue', 'green'),
+  domain = dataset_donations_postcode_ipu$owner.of.postcode)
+
+
+leaflet(dataset_donations_postcode_ipu) %>%
+  addTiles() %>%  
+  setView(-1.581517, 54.77952, zoom = 9) %>%
+  addCircles(
+    lng = dataset_donations_postcode_ipu$longitude,
+    lat = dataset_donations_postcode_ipu$latitude, 
+    label = dataset_donations_postcode_ipu$owner.of.postcode,
+    color = ~ pal(owner.of.postcode))
+
+```
 
 
 

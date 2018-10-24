@@ -6,7 +6,7 @@ library(ggthemes)
 library(astsa)
 library(forecast)
 library(xts) 
-library(ggmap)
+# library(ggmap)
 library(aspace)
 library(forecast)
 library(TTR)
@@ -122,12 +122,12 @@ dataset_donations<- dataset_donations %>%
 
 # # Save the coordinates of a city in a vector (search in google )
 # ### In this case Durham 
-Coord.City <- c(lon = -1.581517, lat = 54.77952)
+# Coord.City <- c(lon = -1.581517, lat = 54.77952)
 # 
 # ## coordinates, zoom = how zoomed will the map be showed, scale = resolution of the map (1 worst ), map type = tipo de mapa (?getmap para ver todos los tipos), source = de donde se lo descarga (si no se especifica es “google”
-map <- get_map(Coord.City, zoom = 1, scale = 1)
+# map <- get_map(Coord.City, zoom = 1, scale = 1)
 # 
-map2<- get_map(Coord.City, zoom = 10, scale = 1)
+# map2<- get_map(Coord.City, zoom = 10, scale = 1)
 
 
 

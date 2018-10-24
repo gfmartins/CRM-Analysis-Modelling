@@ -170,14 +170,20 @@ dataset_donations_postcode_ipu <- dataset_donations %>%
          latitude.y, longitude.y) %>% 
   mutate_if(is.factor, funs(as.character)) %>% 
   replace_na(list(donor.no = "noMatch", anonymous.patient.id = "noMatch")) %>% 
-  mutate(nueva_columna = case_when(donor.no == "no match" ~ "justPatient",
+  mutate(owner.of.postcode = case_when(donor.no == "no match" ~ "justPatient",
                                    anonymous.patient.id == "noMatch" ~ "justDonor",
-                                   !anonymous.patient.id == "noMatch" ~ "bothDonorAndPatient")) %>% 
-  mutate(latutude = case_when(anonymous.patient.id == "no match" ~ latitude.x,
-                              anonymous.patient.id == "no match" ~ longitude.x))
+                                   !anonymous.patient.id == "noMatch" ~ "bothDonorAndPatient"),
+         latitude = coalesce(latitude.x, latitude.y),
+         longitude = coalesce(longitude.x, longitude.y),
+         copy.long = longitude,
+         copy.lat = latitude) %>% 
+  unite(long.lat, copy.long, copy.lat) %>% 
+  distinct(long.lat, .keep_all = TRUE)  %>% 
+  mutate_at(vars(owner.of.postcode), funs(as.factor)) %>% 
+  select(latitude,
+         longitude,
+         owner.of.postcode)
   
-
-
 remove(table_postcodes)
 
 
@@ -541,6 +547,22 @@ ggplotly(p1)
 
 
 ################# Geo Data ################# 
+# Non events
+
+pal <- colorFactor(
+  palette = c('red', 'green'),
+  domain = dataset_donations_postcode_ipu$owner.of.postcode)
+
+
+leaflet(dataset_donations_postcode_ipu) %>%
+  addTiles() %>%  
+  setView(-1.581517, 54.77952, zoom = 9) %>%
+  addCircles(
+    lng = dataset_donations_postcode_ipu$longitude,
+    lat = dataset_donations_postcode_ipu$latitude, 
+    label = dataset_donations_postcode_ipu$owner.of.postcode,
+    color = ~ pal(owner.of.postcode))
+
 
 
 
