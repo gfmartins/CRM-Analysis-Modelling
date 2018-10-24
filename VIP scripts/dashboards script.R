@@ -184,6 +184,11 @@ dataset_donations_postcode_ipu <- dataset_donations %>%
          longitude,
          owner.of.postcode)
   
+
+dataset %>%
+  group_by(variable) %>%
+  mutate(count = sequence(n()))
+
 remove(table_postcodes)
 
 
@@ -194,16 +199,11 @@ remove(table_postcodes)
 
 ################# DataViz  #################
 
+## Create data
 
-### Donations $
-
-
-## Grouped by source
-SourceCode <- "DONRAF"
-Index <- "sum.donations"
-
-p1 <- dataset_donations %>%
+dataset_donations_base <-  dataset_donations %>%
   select(
+    donor.no,
     journal.no,
     donation.date,
     nominal,
@@ -217,16 +217,60 @@ p1 <- dataset_donations %>%
   ) %>%
   mutate(year.unite = strftime(.$donation.date, format = "%Y")) %>%
   mutate(month.unite = strftime(.$donation.date, format = "%m")) %>%
-  unite(MY, month.unite, year.unite) %>%
+  unite(MY, month.unite, year.unite) 
+
+dataset_viz_donations <- dataset_donations_base %>% 
   group_by(MY, source) %>% # In shiny gere goes input$Nominal, source...
   mutate(
     sum.donations = sum(donation.amount),
     average.donations = mean(donation.amount),
     number.donations = n()
   ) %>%
+  ungroup() %>% 
+  distinct(MY, source, .keep_all = TRUE) # In shiny gere goes input$Nominal, source...
+
+dataset_viz_newdonors <- dataset_donations_base %>%
+  # group_by(donor.no) %>%
+  # ungroup() %>%
+  group_by(source, donor.no) %>% # In shiny gere goes input$Nominal, source...
+  mutate(donations.per.donor = n()) %>%
   ungroup() %>%
-  gather(index, value,-c(journal.no:donation.year, MY)) %>%
-  filter(index == Index, source == SourceCode) %>% # In Shiny source = input$grouping variable
+  # gather(index, value, -c(journal.no:donation.year, MY)) %>%
+  filter(donations.per.donor == 1) %>%
+  group_by(MY, nominal) %>% # In shiny gere goes input$Nominal, source...
+  mutate(sum.new.donors = n()) %>%
+  ungroup() %>% 
+  select(MY, sum.new.donors, nominal, source.group, source) %>% 
+  distinct(MY, source, .keep_all = TRUE)
+
+
+dataset_viz_totaldonors <- dataset_donations_base %>%
+  # group_by(donor.no) %>%
+  # ungroup() %>%
+  group_by(MY, source.group) %>% # In shiny gere goes input$Nominal, source...
+  distinct(donor.no, .keep_all = TRUE) %>%
+  mutate(donors.per.month = n()) %>%
+  ungroup() %>% 
+  select(MY, donors.per.month, nominal, source.group, source) %>% 
+  distinct(MY, source, .keep_all = TRUE) 
+  
+dataset_viz_general <- dataset_viz_donations %>% 
+  left_join(dataset_viz_newdonors, by = c("MY", "source")) %>% # In shiny gere goes input$Nominal, source...
+  left_join(dataset_viz_totaldonors, by = c("MY", "source")) # In shiny gere goes input$Nominal, source...
+  
+  
+  
+
+### Donations $
+
+
+## Grouped by source
+SourceCode <- "DONRAF"
+Index <- "sum.donations"
+
+  # Plot
+  dataset_donations_base %>% 
+  filter(index == Index, source == SourceCode) %>%   # In Shiny source = input$grouping variable
   ggplot(aes(donation.month, value, group = donation.year, colour = donation.year)) + # In shiny gere goes input$sum, mean...
   geom_line()
 
@@ -309,32 +353,7 @@ ggplotly(p1)
 ## Filter by nominal
 Nominal <- "4100"
 
-plot1 <- dataset_donations %>%
-  select(
-    journal.no,
-    donation.date,
-    nominal,
-    source.group,
-    source,
-    donation.day,
-    donation.week,
-    donation.month,
-    donation.year,
-    donor.no
-  ) %>%
-  mutate(year.unite = strftime(.$donation.date, format = "%Y")) %>%
-  mutate(month.unite = strftime(.$donation.date, format = "%m")) %>%
-  unite(MY, month.unite, year.unite) %>%
-  # group_by(donor.no) %>%
-  # ungroup() %>%
-  group_by(nominal, donor.no) %>% # In shiny gere goes input$Nominal, source...
-  mutate(donations.per.donor = n()) %>%
-  ungroup() %>%
-  # gather(index, value, -c(journal.no:donation.year, MY)) %>%
-  filter(donations.per.donor == 1) %>%
-  group_by(MY, nominal) %>%
-  mutate(sum.new.donors = n()) %>%
-  ungroup() %>%
+ %>%
   filter(nominal == Nominal) %>% # In Shiny source = input$grouping variable
   ggplot(aes(
     donation.month,
@@ -432,28 +451,7 @@ dataset_donations %>%
 
 Nominal <- "4001"
 
-p1 <- dataset_donations %>%
-  select(
-    journal.no,
-    donation.date,
-    nominal,
-    source.group,
-    source,
-    donation.day,
-    donation.week,
-    donation.month,
-    donation.year,
-    donor.no
-  ) %>%
-  mutate(year.unite = strftime(.$donation.date, format = "%Y")) %>%
-  mutate(month.unite = strftime(.$donation.date, format = "%m")) %>%
-  unite(MY, month.unite, year.unite) %>%
-  # group_by(donor.no) %>%
-  # ungroup() %>%
-  group_by(MY, nominal) %>% # In shiny gere goes input$Nominal, source...
-  distinct(donor.no, .keep_all = TRUE) %>%
-  mutate(donors.per.month = n()) %>%
-  ungroup() %>%
+ %>%
   filter(source.group == Nominal) %>% # In Shiny source = input$grouping variable
   ggplot(
     aes(
@@ -471,28 +469,7 @@ ggplotly(p1)
 
 SourceGroup <- "DOG"
 
-p1 <- dataset_donations %>%
-  select(
-    journal.no,
-    donation.date,
-    nominal,
-    source.group,
-    source,
-    donation.day,
-    donation.week,
-    donation.month,
-    donation.year,
-    donor.no
-  ) %>%
-  mutate(year.unite = strftime(.$donation.date, format = "%Y")) %>%
-  mutate(month.unite = strftime(.$donation.date, format = "%m")) %>%
-  unite(MY, month.unite, year.unite) %>%
-  # group_by(donor.no) %>%
-  # ungroup() %>%
-  group_by(MY, source.group) %>% # In shiny gere goes input$Nominal, source...
-  distinct(donor.no, .keep_all = TRUE) %>%
-  mutate(donors.per.month = n()) %>%
-  ungroup() %>%
+p1 <-  %>%
   filter(source.group == SourceGroup) %>% # In Shiny source = input$grouping variable
   ggplot(
     aes(
