@@ -412,7 +412,7 @@ Sidebar {.sidebar}
 selectInput(
   inputId = "graphid2",
   label = "Select the Graph to Display",
-  choices =  c("Total Donors" = "donors.per.month"),
+  choices =  c("New Donors" = "sum.new.donors", "Total Donors" = "donors.per.month"),
   multiple = FALSE
 )
 
@@ -481,7 +481,7 @@ observeEvent(input$sourcegroupid2, {
 })
 
 
-## Create reactive dataset that will depend on date, nominal, source.group and source code
+## Create reactive dataset that will depend on date, nominal, source.group and source 
 
 reactiveTotalDonors <- reactive({
 dataset_donations_base %>%
