@@ -280,7 +280,7 @@ actionButton(inputId = "actionid1",
 ## Code for making the source.group and source input depend on the nominal code
 observeEvent(input$nominalid, {
   filtered_donations1 <- dataset_donations %>%
-    filter(nominal == input$nominalid, in.use == "Y") %>%
+    filter(nominal == input$nominalid) %>%
     distinct(source.group)
   
   updateSelectInput(session, "sourcegroupid", choices = c(filtered_donations1))
@@ -289,7 +289,7 @@ observeEvent(input$nominalid, {
 
 observeEvent(input$sourcegroupid, {
   filtered_donations2 <- dataset_donations %>%
-    filter(source.group == input$sourcegroupid, in.use == "Y") %>%
+    filter(source.group == input$sourcegroupid) %>%
     distinct(source)
   
   updateSelectInput(session, "sourceid", choices = c(filtered_donations2))
@@ -327,7 +327,7 @@ reactive_viz_donations <- reactive({
     number.donations = n()
   ) %>%
   ungroup() %>% 
-  distinct(MY, input$levelsid, .keep_all = TRUE) # In shiny gere goes input$Nominal, source...
+  distinct(MY, source, .keep_all = TRUE) # In shiny gere goes input$Nominal, source...
 
 })
   
@@ -343,7 +343,7 @@ reactive_viz_newdonors <- reactive({
   mutate(sum.new.donors = n()) %>%
   ungroup() %>% 
   select(MY, sum.new.donors, nominal, source.group, source) %>% 
-  distinct(MY, input$levelsid, .keep_all = TRUE)
+  distinct(MY, source, .keep_all = TRUE)
 
 })
 
@@ -357,7 +357,7 @@ reactive_viz_totaldonors <- reactive({
   mutate(donors.per.month = n()) %>%
   ungroup() %>% 
   select(MY, donors.per.month, nominal, source.group, source) %>% 
-  distinct(MY, input$levelsid, .keep_all = TRUE) 
+  distinct(MY, source, .keep_all = TRUE) 
 
 })
 
@@ -365,42 +365,25 @@ reactive_viz_totaldonors <- reactive({
 
 reactive_viz_general <- reactive({
   reactive_viz_donations() %>% 
-  left_join(reactive_viz_newdonors(), by = c("MY", input$levelsid)) %>% 
-  left_join(reactive_viz_totaldonors(), by = c("MY", input$levelsid)) %>%  
+  left_join(reactive_viz_newdonors(), by = c("MY", "nominal", "source.group", "source")) %>% 
+  left_join(reactive_viz_totaldonors(), by = c("MY", "nominal", "source.group", "source")) %>%
   select(nominal,
-         donation.date,
          source.group,
          source, 
          donation.month, 
-         donation.year, 
+         donation.year,
+         donation.date, 
          MY,
          sum.donations,
          average.donations,
          number.donations,
          sum.new.donors,
-         donors.per.month) %>% 
-  gather(index, value, -c(nominal:MY)) %>% 
-  mutate_if(is.character, funs(as.factor)) %>% 
+         donors.per.month) %>%
+  gather(index, value, -c(nominal:MY)) %>%
+  mutate_if(is.character, funs(as.factor)) %>%
     select(Donation.Date = donation.date, Value = value, Donation.Year = donation.year, Donation.Month = donation.month, everything())
   
 })
-
-# ## Create reactive objects that will depend on date, nominal, source.group and source code
-# 
-# reactiveDonations <- reactive({
-# 
-#  dataset_donations_base %>% 
-#   group_by_at(vars(MY, input$levelsid)) %>%
-#     mutate(
-#     sum.donations = sum(donation.amount),
-#     average.donations = mean(donation.amount),
-#     number.donations = n()
-#     ) %>%
-#     ungroup() %>%
-#     gather(index, value, -c(donor.no:donation.year, MY)) %>% 
-#     select(Donation.Month = donation.month, Value = value, Donation.Year = donation.year, everything())
-#     
-# })
 
   reactiveDonationsFiltered<- reactive({
   if (input$levelsid == "nominal") {
