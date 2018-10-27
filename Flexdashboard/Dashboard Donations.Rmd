@@ -323,7 +323,7 @@ reactive_viz_donations <- reactive({
   group_by_at(vars(MY, input$levelsid)) %>% 
   mutate(
     sum.donations = sum(donation.amount),
-    average.donations = mean(donation.amount),
+    average.donations = mean(donation.amount, na.rm = TRUE),
     number.donations = n()
   ) %>%
   ungroup() %>% 
@@ -385,19 +385,22 @@ reactive_viz_general <- reactive({
   
 })
 
+
   reactiveDonationsFiltered<- reactive({
   if (input$levelsid == "nominal") {
   reactive_viz_general() %>%
+      # distinct(MY, nominal, .keep_all = TRUE) %>%
       filter(
       Donation.Date >= input$dateid1[1] &
       Donation.Date <= input$dateid1[2],
-      index == input$graphid,
-      nominal == input$nominalid
+      nominal == input$nominalid,
+      index == input$graphid
       )
 
 
   } else if (input$levelsid == "source.group") {
    reactive_viz_general() %>%
+    # distinct(MY, source.group, .keep_all = TRUE) %>%
       filter(
       Donation.Date >= input$dateid1[1] &
       Donation.Date <= input$dateid1[2],
@@ -438,17 +441,18 @@ renderPlotly({
   aes(Donation.Month,
   Value,
   group = Donation.Year,
-  colour = Donation.Year)
+  fill = Donation.Year)
   ) +
-  geom_line(alpha = 0.7, size = 1) +
+  geom_col(position = "dodge") +
     theme_economist_white() +
-  scale_colour_economist() + 
+  scale_fill_economist() + 
   labs(x = "Date", 
        y = "Value",
-       colour = "") +
+       fill = "") +
   theme(legend.position = "right", text = element_text(family = "Tahoma"), plot.background = element_rect(fill = "white"), plot.margin=unit(c(1,3,2,2.5),"cm"))
   )
 })
+
 ```
 
 

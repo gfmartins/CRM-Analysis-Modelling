@@ -1,0 +1,95 @@
+
+
+dataset_donations_base <-  dataset_donations %>%
+  select(
+    donor.no,
+    journal.no,
+    donation.date,
+    nominal,
+    source.group,
+    source,
+    donation.day,
+    donation.week,
+    donation.month,
+    donation.year,
+    donation.amount
+  ) %>%
+  mutate(year.unite = strftime(.$donation.date, format = "%Y")) %>%
+  mutate(month.unite = strftime(.$donation.date, format = "%m")) %>%
+  unite(MY, month.unite, year.unite) 
+
+
+## Create reactive objects that will depend on date, nominal, source.group and source code
+
+reactive_viz_donations <- dataset_donations_base %>% 
+    group_by_at(vars(MY, source.group)) %>% 
+    mutate(
+      sum.donations = sum(donation.amount),
+      average.donations = mean(donation.amount),
+      number.donations = n()
+    ) %>%
+    ungroup() %>% 
+    distinct(MY, source, .keep_all = TRUE) # In shiny gere goes input$Nominal, source...
+  
+
+
+
+reactive_viz_newdonors <- dataset_donations_base %>%
+    group_by_at(vars(source.group, donor.no)) %>% # In shiny gere goes input$Nominal, source...
+    mutate(donations.per.donor = n()) %>%
+    ungroup() %>%
+    filter(donations.per.donor == 1) %>%
+    group_by_at(vars(MY, source.group)) %>% 
+    mutate(sum.new.donors = n()) %>%
+    ungroup() %>% 
+    select(MY, sum.new.donors, nominal, source.group, source) %>% 
+    distinct(MY, source, .keep_all = TRUE)
+  
+
+
+
+reactive_viz_totaldonors <- dataset_donations_base %>%
+    # group_by(donor.no) %>%
+    # ungroup() %>%
+    group_by_at(vars(MY, source.group)) %>% # In shiny gere goes input$Nominal, source...
+    distinct(donor.no, .keep_all = TRUE) %>%
+    mutate(donors.per.month = n()) %>%
+    ungroup() %>% 
+    select(MY, donors.per.month, nominal, source.group, source) %>% 
+    distinct(MY, source, .keep_all = TRUE) 
+  
+
+
+SourceGROUP <- "COL"
+Index <- "sum.new.donors"
+
+reactive_viz_general <- reactive_viz_donations %>% 
+    left_join(reactive_viz_newdonors, by = c("MY", "nominal", "source.group", "source")) %>% 
+    left_join(reactive_viz_totaldonors, by = c("MY", "nominal", "source.group", "source")) %>%
+    select(nominal,
+           source.group,
+           source, 
+           donation.month, 
+           donation.year,
+           donation.date, 
+           MY,
+           sum.donations,
+           average.donations,
+           number.donations,
+           sum.new.donors,
+           donors.per.month) %>%
+    gather(index, value, -c(nominal:MY)) %>%
+    mutate_if(is.character, funs(as.factor)) %>%
+    select(Donation.Date = donation.date, Value = value, 
+           Donation.Year = donation.year, Donation.Month = donation.month, everything())
+  
+
+## Grouped by source
+SourceCode <- "COLBOX"
+Index <- "sum.donations"
+
+reactive_viz_general %>% 
+filter(index == Index, source == SourceCode) %>%   # In Shiny source = input$grouping variable
+  ggplot(aes(Donation.Month, Value, group = Donation.Year, fill = Donation.Year)) + # In shiny gere goes input$sum, mean...
+  geom_col(position = "dodge")
+
