@@ -206,7 +206,7 @@ remove(table_postcodes)
 
 
 
-Donations {data-width=700}
+Donations by Source {data-width=700}
 ====================
 
 Column {data-width=300 .sidebar}
@@ -451,10 +451,10 @@ reactive_viz_general <- reactive({
 ```
 
 
-column {.tabset data-width=700}
+column {data-width=700}
 ----------------------
 
-### By Code
+### Barchart
 
 ```{r}
 
@@ -464,7 +464,6 @@ renderPlotly({
   ggplot(
   aes(Donation.Month,
   Value,
-  group = Donation.Year,
   fill = Donation.Year)
   ) +
   geom_col(position = "dodge") +
@@ -480,19 +479,73 @@ renderPlotly({
 ```
 
 
+Donations in Time {data-width=700}
+====================
+
 Column {data-width=300 .sidebar}
+-----------------
+
+<br>
+
+```{r}
 
 
-### General
+## Select input to select graph
+
+# Date input
+dateRangeInput(
+  inputId = "dateid2",
+  label = "Select dates",
+  start = "2017-04-01",
+  end = Sys.Date(),
+  min = "2011-01-01",
+  max = Sys.Date(),
+  startview = "year"
+)
+
+## Boton to create plot
+actionButton(inputId = "actionid2",
+             label = "Clic to Initiate Graph")
+
+
+reactive_viz_perc_digi <- reactive({
+ dataset_donations_base %>% 
+    filter(
+      donation.date >= input$dateid2[1] &
+      donation.date <= input$dateid2[2]) %>% 
+    group_by(MY) %>% 
+    mutate(total.donations = sum(donation.amount)) %>% 
+    ungroup() %>% 
+  mutate(digi.or.phys = case_when(payment.type %in% c(1,2,3,4,5,10,11,12,13,16,18,20) ~ "Phys",
+                                  payment.type %in% c(14,15,17,19) ~ "Digi")) %>%
+  group_by(MY, digi.or.phys) %>%
+  mutate(sum.digital = sum(.$digi.or.phys == "Digi"),
+         sum.physical = sum(.$digi.or.phys == "Phys"),
+         perc.digi = sum.digital / sum.physical) %>%
+  ungroup() %>% 
+  distinct(MY, .keep_all = TRUE) %>% 
+  select(donation.date, MY, total.donations, perc.digi)
+
+})
+
+
+```
+
+
+column {data-width=700}
+----------------------
+
+### Time Series
+
 
 ```{r}
 
 renderPlotly({
-  req(input$actionid1)
+  req(input$actionid2)
   ggplotly((reactive_viz_perc_digi()) %>%
   ggplot(
   aes(donation.date, total.donations, label = perc.digi)) +
-  geom_line(colour = "darkorange1", alpha = 0.8)  +
+  geom_line(colour = "deepskyblue3", alpha = 0.8)  +
   geom_smooth(method = "lm", se = FALSE, colour = "grey40") + 
   theme_economist_white() +
   scale_fill_economist() + 
