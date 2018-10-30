@@ -503,13 +503,24 @@ dateRangeInput(
   startview = "year"
 )
 
+# Selection input of nominal code
+selectInput(
+  inputId = "nominalid2",
+  label = "Select the Nominal Code",
+  choices = c("All", levels(dataset_donations$nominal)),
+  multiple = FALSE
+)
+
 ## Boton to create plot
 actionButton(inputId = "actionid2",
              label = "Clic to Initiate Graph")
 
 
 reactive_viz_perc_digi <- reactive({
- dataset_donations_base %>% 
+  
+  if (input$nominalid2 == "All") {
+    
+    dataset_donations_base %>% 
     filter(
       donation.date >= input$dateid2[1] &
       donation.date <= input$dateid2[2]) %>% 
@@ -521,11 +532,32 @@ reactive_viz_perc_digi <- reactive({
   group_by(MY, digi.or.phys) %>%
   mutate(sum.digital = sum(.$digi.or.phys == "Digi"),
          sum.physical = sum(.$digi.or.phys == "Phys"),
-         perc.digi = sum.digital / sum.physical) %>%
+         pct.digital.payments = round((sum.digital / sum.physical)*100, 2)) %>%
   ungroup() %>% 
   distinct(MY, .keep_all = TRUE) %>% 
-  select(donation.date, MY, total.donations, perc.digi)
-
+  select(Donation.Date = donation.date, MY, Total.Donations = total.donations, Pct.Digital.Payments = pct.digital.payments)
+    
+  } else {
+    
+    dataset_donations_base %>% 
+    filter(
+      donation.date >= input$dateid2[1] &
+      donation.date <= input$dateid2[2],
+      nominal == input$nominalid2) %>% 
+    group_by(MY) %>% 
+    mutate(total.donations = sum(donation.amount)) %>% 
+    ungroup() %>% 
+  mutate(digi.or.phys = case_when(payment.type %in% c(1,2,3,4,5,10,11,12,13,16,18,20) ~ "Phys",
+                                  payment.type %in% c(14,15,17,19) ~ "Digi")) %>%
+  group_by(MY, digi.or.phys) %>%
+  mutate(sum.digital = sum(.$digi.or.phys == "Digi"),
+         sum.physical = sum(.$digi.or.phys == "Phys"),
+         pct.digital.payments = round((sum.digital / sum.physical)*100, 2))  %>%
+  ungroup() %>% 
+  distinct(MY, .keep_all = TRUE) %>% 
+  select(Donation.Date = donation.date, MY, Total.Donations = total.donations, Pct.Digital.Payments = pct.digital.payments)
+    
+}
 })
 
 
@@ -544,7 +576,7 @@ renderPlotly({
   req(input$actionid2)
   ggplotly((reactive_viz_perc_digi()) %>%
   ggplot(
-  aes(donation.date, total.donations, label = perc.digi)) +
+  aes(Donation.Date, Total.Donations, label = Pct.Digital.Payments)) +
   geom_line(colour = "deepskyblue3", alpha = 0.8)  +
   geom_smooth(method = "lm", se = FALSE, colour = "grey40") + 
   theme_economist_white() +
