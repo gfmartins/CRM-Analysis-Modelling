@@ -209,7 +209,7 @@ remove(table_postcodes)
 Donations {data-width=700}
 ====================
 
-Sidebar {.sidebar}
+Column {data-width=300 .sidebar}
 -----------------
 
 <br>
@@ -308,7 +308,8 @@ dataset_donations_base <-  dataset_donations %>%
     donation.week,
     donation.month,
     donation.year,
-    donation.amount
+    donation.amount,
+    payment.type
   ) %>%
   mutate(year.unite = strftime(.$donation.date, format = "%Y")) %>%
   mutate(month.unite = strftime(.$donation.date, format = "%m")) %>%
@@ -316,6 +317,28 @@ dataset_donations_base <-  dataset_donations %>%
 
 
 ## Create reactive objects that will depend on date, nominal, source.group and source code
+
+
+reactive_viz_perc_digi <- reactive({
+ dataset_donations_base %>% 
+    filter(
+      donation.date >= input$dateid1[1] &
+      donation.date <= input$dateid1[2]) %>% 
+    group_by(MY) %>% 
+    mutate(total.donations = sum(donation.amount)) %>% 
+    ungroup() %>% 
+  mutate(digi.or.phys = case_when(payment.type %in% c(1,2,3,4,5,10,11,12,13,16,18,20) ~ "Phys",
+                                  payment.type %in% c(14,15,17,19) ~ "Digi")) %>%
+  group_by(MY, digi.or.phys) %>%
+  mutate(sum.digital = sum(.$digi.or.phys == "Digi"),
+         sum.physical = sum(.$digi.or.phys == "Phys"),
+         perc.digi = sum.digital / sum.physical) %>%
+  ungroup() %>% 
+  distinct(MY, .keep_all = TRUE) %>% 
+  select(donation.date, MY, total.donations, perc.digi)
+
+})
+
 
 reactive_viz_donations <- reactive({
   
@@ -427,10 +450,11 @@ reactive_viz_general <- reactive({
 
 ```
 
-column {data-width=700}
+
+column {.tabset data-width=700}
 ----------------------
 
-### Plot
+### By Code
 
 ```{r}
 
@@ -452,6 +476,32 @@ renderPlotly({
   theme(legend.position = "right", text = element_text(family = "Tahoma"), plot.background = element_rect(fill = "white"), plot.margin=unit(c(1,3,2,2.5),"cm"))
   )
 })
+
+```
+
+
+Column {data-width=300 .sidebar}
+
+
+### General
+
+```{r}
+
+renderPlotly({
+  req(input$actionid1)
+  ggplotly((reactive_viz_perc_digi()) %>%
+  ggplot(
+  aes(donation.date, total.donations, label = perc.digi)) +
+  geom_line(colour = "darkorange1", alpha = 0.8)  +
+  geom_smooth(method = "lm", se = FALSE, colour = "grey40") + 
+  theme_economist_white() +
+  scale_fill_economist() + 
+  labs(x = "Date", 
+       y = "Value") +
+  theme(legend.position = "right", text = element_text(family = "Tahoma"), plot.background = element_rect(fill = "white"), plot.margin=unit(c(1,3,2,2.5),"cm"))
+)
+})
+
 
 ```
 
