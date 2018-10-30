@@ -206,7 +206,7 @@ remove(table_postcodes)
 
 
 
-Donations by Source {data-width=700}
+Monthly Comparison {data-width=700}
 ====================
 
 Column {data-width=300 .sidebar}
@@ -319,7 +319,7 @@ dataset_donations_base <-  dataset_donations %>%
 ## Create reactive objects that will depend on date, nominal, source.group and source code
 
 
-reactive_viz_perc_digi <- reactive({
+reactiveVizPercDigi <- reactive({
  dataset_donations_base %>% 
     filter(
       donation.date >= input$dateid1[1] &
@@ -340,7 +340,7 @@ reactive_viz_perc_digi <- reactive({
 })
 
 
-reactive_viz_donations <- reactive({
+reactiveVizDonations <- reactive({
   
   dataset_donations_base %>% 
   group_by_at(vars(MY, input$levelsid)) %>% 
@@ -355,7 +355,7 @@ reactive_viz_donations <- reactive({
 })
   
 
-reactive_viz_newdonors <- reactive({
+reactiveVizNewdonors <- reactive({
   
   dataset_donations_base %>%
   group_by_at(vars(input$levelsid, donor.no)) %>% # In shiny gere goes input$Nominal, source...
@@ -371,7 +371,7 @@ reactive_viz_newdonors <- reactive({
 })
 
 
-reactive_viz_totaldonors <- reactive({
+reactiveVizTotaldonors <- reactive({
   dataset_donations_base %>%
   # group_by(donor.no) %>%
   # ungroup() %>%
@@ -386,10 +386,10 @@ reactive_viz_totaldonors <- reactive({
 
 
 
-reactive_viz_general <- reactive({
-  reactive_viz_donations() %>% 
-  left_join(reactive_viz_newdonors(), by = c("MY", "nominal", "source.group", "source")) %>% 
-  left_join(reactive_viz_totaldonors(), by = c("MY", "nominal", "source.group", "source")) %>%
+reactiveVizGeneral <- reactive({
+  reactiveVizDonations() %>% 
+  left_join(reactiveVizNewdonors(), by = c("MY", "nominal", "source.group", "source")) %>% 
+  left_join(reactiveVizTotaldonors(), by = c("MY", "nominal", "source.group", "source")) %>%
   select(nominal,
          source.group,
          source, 
@@ -411,7 +411,7 @@ reactive_viz_general <- reactive({
 
   reactiveDonationsFiltered<- reactive({
   if (input$levelsid == "nominal") {
-  reactive_viz_general() %>%
+  reactiveVizGeneral() %>%
       # distinct(MY, nominal, .keep_all = TRUE) %>%
       filter(
       Donation.Date >= input$dateid1[1] &
@@ -422,7 +422,7 @@ reactive_viz_general <- reactive({
 
 
   } else if (input$levelsid == "source.group") {
-   reactive_viz_general() %>%
+   reactiveVizGeneral() %>%
     # distinct(MY, source.group, .keep_all = TRUE) %>%
       filter(
       Donation.Date >= input$dateid1[1] &
@@ -434,7 +434,7 @@ reactive_viz_general <- reactive({
 
 
   } else if (input$levelsid == "source") {
- reactive_viz_general() %>%
+ reactiveVizGeneral() %>%
       filter(
       Donation.Date >= input$dateid1[1] &
       Donation.Date <= input$dateid1[2],
@@ -449,6 +449,32 @@ reactive_viz_general <- reactive({
 
 
 ```
+
+
+<style>
+body {
+text-align: left}
+</style>
+
+<br>
+
+**Monthly Comparison of Donations**
+
+This graph allows the user to compare across time, by month, different donation's indexes. 
+
+The data can be filtered by:
+
+* Nominal: A broad categorization of the Hospice's income sources
+<br>
+
+* Source Group: Generally a particular income generating activity
+<br>
+
+* Source: A specific category on any activity (e.g. tickets, raffles, etc.)
+
+By comparing different sources it is possible to note how donations are developing at the present compared to previous years. 
+
+<br>
 
 
 column {data-width=700}
@@ -516,7 +542,7 @@ actionButton(inputId = "actionid2",
              label = "Clic to Initiate Graph")
 
 
-reactive_viz_perc_digi <- reactive({
+reactiveVizPercDigi <- reactive({
   
   if (input$nominalid2 == "All") {
     
@@ -564,17 +590,37 @@ reactive_viz_perc_digi <- reactive({
 ```
 
 
+<style>
+body {
+text-align: left}
+</style>
+
+<br>
+
+**Total Donations and Percentage of Digital Payments**
+
+This graph allows the user to compare the total of donations across time, as well as know the percentage (pct.) of digital payments done in the date range selected.  
+
+The data can be filtered by:
+
+* Nominal: A broad categorization of the Hospice's income sources
+<br>
+
+By comparing different nominal codes it is possible to note trends in donations, as well as discover which income sources are more digitalized.
+
+<br>
+
 column {data-width=700}
 ----------------------
 
-### Time Series
+### Line Chart
 
 
 ```{r}
 
 renderPlotly({
   req(input$actionid2)
-  ggplotly((reactive_viz_perc_digi()) %>%
+  ggplotly((reactiveVizPercDigi()) %>%
   ggplot(
   aes(Donation.Date, Total.Donations, label = Pct.Digital.Payments)) +
   geom_line(colour = "deepskyblue3", alpha = 0.8)  +
