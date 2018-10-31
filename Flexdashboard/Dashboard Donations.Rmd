@@ -16,12 +16,6 @@ runApp: showcase
 library(tidyverse)
 library(readxl)
 library(ggthemes)
-# library(astsa)
-# library(forecast)
-# library(xts)
-# library(aspace)
-# library(forecast)
-# library(data.table)
 library(leaflet)
 library(plotly)
 
@@ -115,16 +109,16 @@ dataset_donations <-
   mutate_if(is.character, funs(as.factor)) %>%
   mutate_at(vars(donor.no, nominal), funs(as.factor)) %>%
   select(
-  -source.group.x,
-  source.group = source.group.y,
-  donor.postcode = postcode,
-  donor.town = town,
-  donor.gender = gender,
-  donation.day = day,
-  donation.week = week,
-  donation.month = month,
-  donation.year = year,
-  everything()
+    -source.group.x,
+    source.group = source.group.y,
+    donor.postcode = postcode,
+    donor.town = town,
+    donor.gender = gender,
+    donation.day = day,
+    donation.week = week,
+    donation.month = month,
+    donation.year = year,
+    everything()
   )
 
 # IPU, CS dataset
@@ -137,8 +131,8 @@ dataset_oacc <-
   rename_all(funs(gsub("_", ".", .))) %>%
   mutate_at(
   vars(
-  q2.pain:q9.practical.matters.addressed,
-  quality.of.life.before.admission.to.spct:lost.control
+    q2.pain:q9.practical.matters.addressed,
+    quality.of.life.before.admission.to.spct:lost.control
   ),
   funs(as.numeric)
   ) %>%
@@ -147,7 +141,11 @@ dataset_oacc <-
   mutate_at(vars(date.of.contact), funs(as.Date)) %>%
   group_by(date.of.contact) %>%
   mutate(mean.age = round(mean(patient.age), 0)) %>%
-  select(anonymous.patient.id, spell, date.of.contact) %>%
+  select(
+    anonymous.patient.id, 
+    spell, 
+    date.of.contact
+  ) %>%
   ungroup()
 
 ### IPU
@@ -161,7 +159,12 @@ dataset_ipu <-
   mutate_if(is.character, funs(as.factor)) %>%
   mutate_at(vars(nhs.number), funs(as.factor)) %>%
   mutate_at(vars(date.of.admission..dd.mm.yyyy.), funs(as.Date)) %>%
-  select(nhs.number, spell, date.of.admission..dd.mm.yyyy., postcode)
+  select(
+    nhs.number, 
+    spell, 
+    date.of.admission..dd.mm.yyyy., 
+    postcode
+  )
 
 ### IPU, OACC
 ## Join datasets IPU and OACC
@@ -179,7 +182,11 @@ table_postcodes <-
   ) %>%
   rename_all(funs(tolower(make.names(.)))) %>%
   rename_all(funs(gsub("_", ".", .))) %>%
-  select(postcode, latitude, longitude)
+  select(
+    postcode, 
+    latitude, 
+    longitude
+    )
   
 ## Join IPU, CS data with UK postcodes to get the longitud and latitude
 table_CS_postcodes <-
@@ -192,20 +199,21 @@ dataset_donations_postcode_ipu <- dataset_donations %>%
   left_join(table_postcodes, by = c("donor.postcode" = "postcode")) %>%
   full_join(table_CS_postcodes, by = c("donor.postcode" = "postcode")) %>%
   select(
-  donor.no,
-  anonymous.patient.id,
-  donor.postcode,
-  latitude.x,
-  longitude.x,
-  latitude.y,
-  longitude.y
+    donor.no,
+    anonymous.patient.id,
+    donor.postcode,
+    latitude.x,
+    longitude.x,
+    latitude.y,
+    longitude.y
   ) %>%
   mutate_if(is.factor, funs(as.character)) %>%
   replace_na(list(donor.no = "noMatch", anonymous.patient.id = "noMatch")) %>%
   mutate(
-  owner.of.postcode = case_when(
-  donor.no == "no match" ~ "justPatient",
-  anonymous.patient.id == "noMatch" ~ "justDonor",!anonymous.patient.id == "noMatch" ~ "bothDonorAndPatient"
+    owner.of.postcode = case_when(
+    donor.no == "no match" ~ "justPatient",
+    anonymous.patient.id == "noMatch" ~ "justDonor",
+    !anonymous.patient.id == "noMatch" ~ "bothDonorAndPatient"
   ),
   latitude = coalesce(latitude.x, latitude.y),
   longitude = coalesce(longitude.x, longitude.y),
@@ -215,9 +223,11 @@ dataset_donations_postcode_ipu <- dataset_donations %>%
   unite(long.lat, copy.long, copy.lat) %>%
   distinct(long.lat, .keep_all = TRUE)  %>%
   mutate_at(vars(owner.of.postcode), funs(as.factor)) %>%
-  select(latitude,
-  longitude,
-  owner.of.postcode)
+  select(
+    latitude,
+    longitude,
+    owner.of.postcode
+    )
   
 ## Remove table containing UK postcodes to free up space
 remove(table_postcodes)
@@ -323,18 +333,18 @@ observeEvent(input$sourcegroupid, {
 
 dataset_donations_base <-  dataset_donations %>%
   select(
-  donor.no,
-  journal.no,
-  donation.date,
-  nominal,
-  source.group,
-  source,
-  donation.day,
-  donation.week,
-  donation.month,
-  donation.year,
-  donation.amount,
-  payment.type
+    donor.no,
+    journal.no,
+    donation.date,
+    nominal,
+    source.group,
+    source,
+    donation.day,
+    donation.week,
+    donation.month,
+    donation.year,
+    donation.amount,
+    payment.type
   ) %>%
   mutate(year.unite = strftime(.$donation.date, format = "%Y")) %>%
   mutate(month.unite = strftime(.$donation.date, format = "%m")) %>%
@@ -348,12 +358,12 @@ reactiveVizDonations <- reactive({
   dataset_donations_base %>%
   group_by_at(vars(MY, input$levelsid)) %>%
   mutate(
-  sum.donations = sum(donation.amount),
-  average.donations = mean(donation.amount, na.rm = TRUE),
-  number.donations = n()
+    sum.donations = sum(donation.amount),
+    average.donations = round(mean(donation.amount, na.rm = TRUE),2),
+    number.donations = n()
   ) %>%
   ungroup() %>%
-  distinct(MY, source, .keep_all = TRUE) # In shiny gere goes input$Nominal, source...
+  distinct(MY, source, .keep_all = TRUE) 
   
 })
   
@@ -361,14 +371,20 @@ reactiveVizDonations <- reactive({
 ## Reactive with new donors values 
 reactiveVizNewdonors <- reactive({
   dataset_donations_base %>%
-  group_by_at(vars(input$levelsid, donor.no)) %>% # In shiny gere goes input$Nominal, source...
+  group_by_at(vars(input$levelsid, donor.no)) %>% 
   mutate(donations.per.donor = n()) %>%
   ungroup() %>%
   filter(donations.per.donor == 1) %>%
   group_by_at(vars(MY, input$levelsid)) %>%
   mutate(sum.new.donors = n()) %>%
   ungroup() %>%
-  select(MY, sum.new.donors, nominal, source.group, source) %>%
+  select(
+    MY, 
+    sum.new.donors, 
+    nominal, 
+    source.group, 
+    source
+    ) %>%
   distinct(MY, source, .keep_all = TRUE)
   
 })
@@ -376,13 +392,17 @@ reactiveVizNewdonors <- reactive({
 # Reactive with total donors values
 reactiveVizTotaldonors <- reactive({
   dataset_donations_base %>%
-  # group_by(donor.no) %>%
-  # ungroup() %>%
-  group_by_at(vars(MY, input$levelsid)) %>% # In shiny gere goes input$Nominal, source...
+  group_by_at(vars(MY, input$levelsid)) %>%
   distinct(donor.no, .keep_all = TRUE) %>%
   mutate(donors.per.month = n()) %>%
   ungroup() %>%
-  select(MY, donors.per.month, nominal, source.group, source) %>%
+  select(
+    MY, 
+    donors.per.month, 
+    nominal, 
+    source.group, 
+    source
+  ) %>%
   distinct(MY, source, .keep_all = TRUE)
   
 })
@@ -391,32 +411,30 @@ reactiveVizTotaldonors <- reactive({
 # Join all indexes calculated in a single tidied table
 reactiveVizGeneral <- reactive({
   reactiveVizDonations() %>%
-  left_join(reactiveVizNewdonors(),
-  by = c("MY", "nominal", "source.group", "source")) %>%
-  left_join(reactiveVizTotaldonors(),
-  by = c("MY", "nominal", "source.group", "source")) %>%
+  left_join(reactiveVizNewdonors(), by = c("MY", "nominal", "source.group", "source")) %>%
+  left_join(reactiveVizTotaldonors(), by = c("MY", "nominal", "source.group", "source")) %>%
   select(
-  nominal,
-  source.group,
-  source,
-  donation.month,
-  donation.year,
-  donation.date,
-  MY,
-  sum.donations,
-  average.donations,
-  number.donations,
-  sum.new.donors,
-  donors.per.month
+    nominal,
+    source.group,
+    source,
+    donation.month,
+    donation.year,
+    donation.date,
+    MY,
+    sum.donations,
+    average.donations,
+    number.donations,
+    sum.new.donors,
+    donors.per.month
   ) %>%
   gather(index, value,-c(nominal:MY)) %>%
   mutate_if(is.character, funs(as.factor)) %>%
   select(
-  Donation.Date = donation.date,
-  Value = value,
-  Donation.Year = donation.year,
-  Donation.Month = donation.month,
-  everything()
+    Donation.Date = donation.date,
+    Value = value,
+    Donation.Year = donation.year,
+    Donation.Month = donation.month,
+    everything()
   )
   
 })
@@ -425,36 +443,34 @@ reactiveVizGeneral <- reactive({
 reactiveDonationsFiltered <- reactive({
   if (input$levelsid == "nominal") {
   reactiveVizGeneral() %>%
-  # distinct(MY, nominal, .keep_all = TRUE) %>%
   filter(
-  Donation.Date >= input$dateid1[1] &
-  Donation.Date <= input$dateid1[2],
-  nominal == input$nominalid,
-  index == input$graphid
+    Donation.Date >= input$dateid1[1] &
+    Donation.Date <= input$dateid1[2],
+    nominal == input$nominalid,
+    index == input$graphid
   )
 
 
   } else if (input$levelsid == "source.group") {
     reactiveVizGeneral() %>%
-      # distinct(MY, source.group, .keep_all = TRUE) %>%
       filter(
-      Donation.Date >= input$dateid1[1] &
-      Donation.Date <= input$dateid1[2],
-      nominal == input$nominalid,
-      source.group == input$sourcegroupid,
-      index == input$graphid
+        Donation.Date >= input$dateid1[1] &
+        Donation.Date <= input$dateid1[2],
+        nominal == input$nominalid,
+        source.group == input$sourcegroupid,
+        index == input$graphid
       )
 
 
   } else if (input$levelsid == "source") {
     reactiveVizGeneral() %>%
       filter(
-      Donation.Date >= input$dateid1[1] &
-      Donation.Date <= input$dateid1[2],
-      nominal == input$nominalid,
-      source.group == input$sourcegroupid,
-      source == input$sourceid,
-      index == input$graphid
+        Donation.Date >= input$dateid1[1] &
+        Donation.Date <= input$dateid1[2],
+        nominal == input$nominalid,
+        source.group == input$sourcegroupid,
+        source == input$sourceid,
+        index == input$graphid
       )
   }
   
@@ -485,7 +501,7 @@ The data can be filtered by:
 
 * Source: A specific category on any activity (e.g. tickets, raffles, etc.)
 
-By comparing different sources it is possible to note how donations are developing at the present compared to previous years. 
+By comparing different sources it is possible to note how donations are developing at the present compared to previous years, or set targets. 
 
 <br>
 
@@ -501,20 +517,20 @@ column {data-width=700}
 renderPlotly({
   req(input$actionid1)
   ggplotly((reactiveDonationsFiltered()) %>%
-  ggplot(aes(Donation.Month,
-  Value,
-  fill = Donation.Year)) +
+  ggplot(aes(Donation.Month, Value, fill = Donation.Year)) +
   geom_col(position = "dodge") +
   theme_economist_white() +
   scale_fill_economist() +
-  labs(x = "Date",
-  y = "Value",
-  fill = "") +
+  labs(
+    x = "Date",
+    y = "Value",
+    fill = ""
+  ) +
   theme(
-  legend.position = "right",
-  text = element_text(family = "Tahoma"),
-  plot.background = element_rect(fill = "white"),
-  plot.margin = unit(c(1, 3, 2, 2.5), "cm")
+    legend.position = "right",
+    text = element_text(family = "Tahoma"),
+    plot.background = element_rect(fill = "white"),
+    plot.margin = unit(c(1, 3, 2, 2.5), "cm")
   )
   )
 })
@@ -564,8 +580,10 @@ actionButton(inputId = "actionid2",
 reactiveVizPercDigi <- reactive({
   if (input$nominalid2 == "All") {
   dataset_donations_base %>%
-  filter(donation.date >= input$dateid2[1] &
-  donation.date <= input$dateid2[2]) %>%
+  filter(
+    donation.date >= input$dateid2[1] &
+    donation.date <= input$dateid2[2]
+  ) %>%
   group_by(MY) %>%
   mutate(total.donations = sum(donation.amount)) %>%
   ungroup() %>%
@@ -575,25 +593,25 @@ reactiveVizPercDigi <- reactive({
   )) %>%
   group_by(MY, digi.or.phys) %>%
   mutate(
-  sum.digital = sum(.$digi.or.phys == "Digi"),
-  sum.physical = sum(.$digi.or.phys == "Phys"),
-  pct.digital.payments = round((sum.digital / sum.physical) * 100, 2)
+    sum.digital = sum(.$digi.or.phys == "Digi"),
+    sum.physical = sum(.$digi.or.phys == "Phys"),
+    pct.digital.payments = round((sum.digital / sum.physical) * 100, 2)
   ) %>%
   ungroup() %>%
   distinct(MY, .keep_all = TRUE) %>%
   select(
-  Donation.Date = donation.date,
-  MY,
-  Total.Donations = total.donations,
-  Pct.Digital.Payments = pct.digital.payments
+    Donation.Date = donation.date,
+    MY,
+    Total.Donations = total.donations,
+    Pct.Digital.Payments = pct.digital.payments
   )
   
   } else {
   dataset_donations_base %>%
   filter(
-  donation.date >= input$dateid2[1] &
-  donation.date <= input$dateid2[2],
-  nominal == input$nominalid2
+    donation.date >= input$dateid2[1] &
+    donation.date <= input$dateid2[2],
+    nominal == input$nominalid2
   ) %>%
   group_by(MY) %>%
   mutate(total.donations = sum(donation.amount)) %>%
@@ -604,17 +622,17 @@ reactiveVizPercDigi <- reactive({
   )) %>%
   group_by(MY, digi.or.phys) %>%
   mutate(
-  sum.digital = sum(.$digi.or.phys == "Digi"),
-  sum.physical = sum(.$digi.or.phys == "Phys"),
-  pct.digital.payments = round((sum.digital / sum.physical) * 100, 2)
+    sum.digital = sum(.$digi.or.phys == "Digi"),
+    sum.physical = sum(.$digi.or.phys == "Phys"),
+    pct.digital.payments = round((sum.digital / sum.physical) * 100, 2)
   )  %>%
   ungroup() %>%
   distinct(MY, .keep_all = TRUE) %>%
   select(
-  Donation.Date = donation.date,
-  MY,
-  Total.Donations = total.donations,
-  Pct.Digital.Payments = pct.digital.payments
+    Donation.Date = donation.date,
+    MY,
+    Total.Donations = total.donations,
+    Pct.Digital.Payments = pct.digital.payments
   )
   
   }
@@ -656,24 +674,27 @@ column {data-width=700}
 renderPlotly({
   req(input$actionid2)
   ggplotly((reactiveVizPercDigi()) %>%
-  ggplot(
-  aes(Donation.Date, Total.Donations, label = Pct.Digital.Payments)
-  ) +
-  geom_line(colour = "deepskyblue3", alpha = 0.8)  +
+  ggplot(aes(Donation.Date, Total.Donations, label = Pct.Digital.Payments)) +
+  geom_line(
+    colour = "deepskyblue3", 
+    alpha = 0.8
+  )  +
   geom_smooth(
-  method = "lm",
-  se = FALSE,
-  colour = "grey40"
+    method = "lm",
+    se = FALSE,
+    colour = "grey40"
   ) +
   theme_economist_white() +
   scale_fill_economist() +
-  labs(x = "Date",
-  y = "Value") +
+  labs(
+    x = "Date",
+    y = "Value"
+  ) +
   theme(
-  legend.position = "right",
-  text = element_text(family = "Tahoma"),
-  plot.background = element_rect(fill = "white"),
-  plot.margin = unit(c(1, 3, 2, 2.5), "cm")
+    legend.position = "right",
+    text = element_text(family = "Tahoma"),
+    plot.background = element_rect(fill = "white"),
+    plot.margin = unit(c(1, 3, 2, 2.5), "cm")
   )
   )
 })
@@ -699,10 +720,10 @@ leaflet(dataset_donations_postcode_ipu) %>%
   addTiles() %>%
   setView(-1.581517, 54.77952, zoom = 9) %>%
   addCircles(
-  lng = dataset_donations_postcode_ipu$longitude,
-  lat = dataset_donations_postcode_ipu$latitude,
-  label = dataset_donations_postcode_ipu$owner.of.postcode,
-  color = ~ pal(owner.of.postcode)
+    lng = dataset_donations_postcode_ipu$longitude,
+    lat = dataset_donations_postcode_ipu$latitude,
+    label = dataset_donations_postcode_ipu$owner.of.postcode,
+    color = ~ pal(owner.of.postcode)
   )
   
 
