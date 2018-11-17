@@ -1,5 +1,13 @@
-table1 <- 
-
+library(purrr)
+library(tidyverse)
+library(caret)
+library(readxl)
+library(cluster)
+library(parallel)
+library(plotly)
+library(fpc)
+library(factoextra)
+library(dbscan)
 
 
 # Use: if we want to get pattern in data without a target variable
@@ -9,18 +17,12 @@ table1 <-
 ############################################### General template for Machine learning ################################################## 
 
 # 1) Importar dataset
-dataset_clustering<- dataset_donations %>%
+dataset_pre_clustering <- dataset_donations %>%
   select(
     donation.date,
     donation.year,
     donor.no,
-    donor.postcode,
-    donor.category,
-    donor.gender,
-    donation.amount,
-    nominal,
-    source.group,
-    source
+    donation.amount
   ) %>%
   group_by(donation.year, donor.no) %>%
   mutate(
@@ -33,8 +35,12 @@ dataset_clustering<- dataset_donations %>%
     number.donations = mean(number.donation.year, na.rm = TRUE),
     value.donations = mean(value.donations.year, na.rm = TRUE)
   ) %>%
-  ungroup()
-  
+  ungroup() %>% 
+  filter(value.donations < 10000, number.donations < 30)
+
+dataset_clustering<- dataset_pre_clustering %>%
+  select(number.donations, value.donations) 
+
 
 # Scale the data if neccesary (by preProcess = )
 # library(caret)
@@ -56,7 +62,6 @@ summary(dataset_clustering)
 # Use the elbow method to find the optimal number of clusters
 ## If we know beforehand that there are for example two subgroups, we omit this step
 ## Use map_dbl to run many models with varying value of k (centers)
-library(purrr)
 tot_withinss <- map_dbl(1:10,  function(k){
   model <- kmeans(x = dataset_clustering, centers = k)
   model$tot.withinss
@@ -75,42 +80,59 @@ ggplot(table_elbow, aes(x = k, y = tot_withinss)) +
   scale_x_continuous(breaks = 1:10)
 
 # Number of clusters decided to use
-NumberClusters<- "NUMBER OF CLUSTERS"
+NumberClusters<- 3
 
 
-### Use Silhouette Analysis for determining the correct number of clusters
+## Use Silhouette Analysis for determining the correct number of clusters
 
 ## Generate a k-means model using the pam() function with a k value that we want to asses its correctness
-library(cluster)
-ObjectPam <- pam(dataset_clustering, k = NumberClusters)
+ no_cores <- detectCores() - 1
 
-## Plot the silhouette visual for the pam_k2 model
-plot(silhouette(ObjectPam))
+ ## Initiate cluster
+ cl <- makeCluster(no_cores, type="FORK")
+
+ ## Create Pam object
+ ObjectPam <- pam(dataset_clustering, k = NumberClusters)
+
+ stopCluster(cl)
+
+
+ ## Plot the silhouette visual for the ObjectPam model
+ plot(silhouette(ObjectPam))
 
 
 # Plot the Silhouette index with different k values
 ## Use map_dbl to run many models with varying value of k (in this case k = 2:10)
-sil_width <- map_dbl(2:10,  function(k){
+
+no_cores <- detectCores() - 1
+
+## Initiate cluster
+cl <- makeCluster(no_cores, type="FORK")
+
+sil_width <- map_dbl(2:5,  function(k){
   model <- pam(x = dataset_clustering, k = k)
   model$silinfo$avg.width
 })
 
+stopCluster(cl)
+
+
 ## Generate a data frame containing both k and sil_width
 table_silhouette <- data.frame(
-  k = 2:10,
+  k = 2:5,
   sil_width = sil_width
 )
 
-## Plot 
+## Plot
 ggplot(table_silhouette, aes(x = k, y = sil_width)) +
   geom_line() +
-  scale_x_continuous(breaks = 2:10)
+  scale_x_continuous(breaks = 2:5)
 
 
 ### Applying k-means to the dataset
 ## Dataset, número de clusters que se ve mediante la observación del gráfico (donde se suaviza la pendiente), número de iteraciones (valor fijo 300), nstart = valor fijo en 10, iter.max = valor máximo que R buscará (es bueno ponerlo para ver cual es el mejor resultado pero no es necesario)
 set.seed(29)
-ObjectKM<- kmeans(dataset_clustering, NumberClusters, iter.max = 300, nstart = 10, iter.max = 50)
+ObjectKM<- kmeans(dataset_clustering, NumberClusters, iter.max = 300, nstart = 10)
 VectorClusters<- ObjectKM$cluster
 ## Create a new column with the clients and the cluster in which it was assigned
 dataset_clustered_km <- mutate(dataset_clustering, cluster.assigned = VectorClusters)
@@ -118,13 +140,12 @@ dataset_clustered_km <- mutate(dataset_clustering, cluster.assigned = VectorClus
 # Visualize the clusters
 ## Option1
 ## lines = 0 es porque no queremos que se grafiquen lineas de distancia, shade = true (parametro fijo), color = parametro fijo, labels = 2 (para tener todo en el grafico), plotchar = parametro fijo, span = parametro fijo) 
-library(cluster)
 clusplot(dataset_clustering,
          VectorClusters,
          lines = 0,
          shade = TRUE,
          color = TRUE,
-         labels = 2,
+         labels = 5,
          plotchar = FALSE,
          span = TRUE,
          main = paste("Clusters of "),
@@ -132,74 +153,105 @@ clusplot(dataset_clustering,
          ylab = "COLUMN2")
 
 ## Option2
-ggplot(dataset_clustered_km, aes(x = "X VALUE", y = "Y VALUE", color = factor(cluster.assigned))) +
-  geom_point()
+ggplot(dataset_clustered_km, aes(x = number.donations, y = value.donations, color = factor(cluster.assigned))) +
+  geom_point(alpha = 0.5)
 
 
 
+###### Third part: DBSCAN Clustering ###### 
 
-###### Second part: Hierarchical Clustering ###### 
+# Compute DBSCAN using fpc package
 
-# 4.2) Train the model
+## Determine EPS and MinPts values
+## Use K-NN to find the knee on the plot and set the value of EPS
+## Normally K = 5 is used, but it can vary (see sheet Statistics Concepts for clarification)
+## If the graph is not plotting correctly then the data must be filtered
+## Select K value
+KValue<- 4
+## Plot the distances
+kNNdistplot(dataset_clustering, 
+            k =  KValue)
+## Draw a line on the knee to see eps value
+abline(h = 0.12, lty = 2)
+## Insert the value where the knee in the plot is formed (value h on abline())
+EpsValue <- 0.12
 
-# Determine number of clusters: Dendogram
-## Be aware of choosing the correct method = according to the problem
-ObjectHc<- hclust(dist(dataset, method = "euclidean"), method = "ward.D")
-# ObjectHc2 <- hclust(dist(dataset, method = "OTHER METHOD"), method = "OTHER METHOD")
-# ObjectHc2 <- hclust(dist(dataset, method = "OTHER METHOD"), method = "OTHER METHOD")
+## Create the DBSCAN object
+set.seed(123)
+ObjectDBSCAN <- dbscan::dbscan(dataset_clustering, 
+                               EpsValue, 
+                               KValue)
 
-# Plot dendogram to see the the number of clusters
-## You look for the longest vertical line that is not crossed by the imaginary horizontal lines, numbers of vertical lines crossed at that hight its the number of clusters) or elbow method
-## Plot one single dendogram
-plot(ObjectHc)
-
-## Compare multiple dendograms
-# par(mfrow = c(1,3))
-# plot(ObjectHc, main = 'METHOD')
-# plot(ObjectHc2, main = 'METHOD')
-# plot(ObjectHc3, main = 'METHOD')
-
-# Plot a dendogram coloring the different clusters according to a certain distance height
-library(dendextend)
-## Create a dendrogram object from the hclust variable
-ObjectDendogram <- as.dendrogram(ObjectHc)
-
-## Color branches by cluster formed from the cut at a height of 20
-plotColoredDend <- color_branches(ObjectDendogram, h = 20)
-
-## Plot the dendrogram with clusters colored below height 20
-plot(plotColoredDend)
-
-
-# Cluster data according to number of clusters dectected
-## NumberClusters = number of clusters detected on dendogram
-NumberClusters<- "NUMBER OF CLUSTERS DETECTED"
-## Make the clusters by assigning a number of wanted clusters
-VectorClusters<- cutree(ObjectHc, NumberClusters)
-
-
-# #  Make the clusters by cutting the dendogram at a certain hight (drawing an imaginary horizontal line)
-# ## Normally the lower this number is, the more clusters will be created
-# ## HightClusters = maximum distance permitted by cluster
-# HeightClusters<- "DESIRED HEIGHT"
-# ## Make the clusters by assigning a certain hight
-# VectorClustersWithHeight <- cutree(hc_players, h = HeightClusters)
-
-
+# Print DBSCAN and see cluster membership
+## Column names are clusters, cluster 0 are outliers
+print(ObjectDBSCAN)
+## Cluster membership. Noise/outlier observations are coded as 0
+VectorClusters<- ObjectDBSCAN$cluster
 ## Create a new column with the clients and the cluster in which it was assigned
-dataset_clustered_hc <- mutate(dataset_clustering, cluster.assigned = VectorClusters)
+dataset_clustered_dbscan <- mutate(dataset_pre_clustering, cluster.assigned = VectorClusters)
 
-# Explore results
-## Count the cluster assignments
-count(dataset_clustered_hc, cluster.assigned)
+# Visualize the clusters
+## Option 1
+plot(ObjectDBSCAN, dataset_clustering, main = "DBSCAN", frame = FALSE)
 
-# Calculate summary statistics for each category (e.g. mean())
-dataset_clustered_hc %>% 
+## Option 2
+## stand = FALSE if already standarized the dataset, geom = type of graph
+fviz_cluster(ObjectDBSCAN, dataset_clustering, stand = FALSE, frame = FALSE, geom = "point")
+
+
+
+###### Fourth part:Exploration ###### 
+
+
+# Clusters exploration
+## DBSCAN
+dataset_clustered_dbscan %>% 
   group_by(cluster.assigned) %>% 
   mutate(count.per.cluster = n()) %>% 
-  summarise_all(funs(mean(.)))
+  summarise_all(funs(mean(.))) %>% 
+  # filter(cluster.assigned %in% c(0,1,2)) %>% 
+  View("DBSCAN")
 
-# Plot the clusters and color them using their cluster
-ggplot(dataset_clustered_hc, aes(x = "X VALUE", y = "Y VALUE", color = factor(cluster.assigned))) +
-  geom_point()
+## K-Means
+dataset_clustered_km %>% 
+  group_by(cluster.assigned) %>% 
+  mutate(count.per.cluster = n()) %>% 
+  summarise_all(funs(mean(.))) %>% View("KM")
+
+
+# Add clusters to dataset_donations 
+## Include clusters in dataset_pre_clustering
+dataset_post_clustering <-  dataset_pre_clustering %>% 
+  mutate(cluster.assigned = dataset_clustered_km$cluster.assigned)
+
+## Include clusters to main dataset
+dataset_donations <- dataset_donations %>% 
+  left_join(dataset_post_clustering, by = "donor.no")
+
+### Exploration on main dataset with clusters
+
+dataset_donations %>% 
+  group_by(donor.type, cluster.assigned) %>% 
+  summarize(count = n()) %>% 
+  View("count grouped source.group and cluster")
+
+addmargins(apply(dataset_donations, 2, is.na)) %>% tail(n=1) %>% View()
+NAs<- which(is.na(dataset_donations$cluster.assigned))
+dataset_donations[NAs,] %>% droplevels() %>% View()
+borrar <- setdiff(dataset_donations$donor.no, dataset_post_clustering$donor.no)
+
+dataset_donations %>% 
+  filter(donor.no %in% borrar) %>% View("Donors not included in clustering")
+
+> table(dataset_donations$donor.type)
+> table(dataset_donations$donor.category)
+
+
+# Insights:
+# Two clusters
+  # cluster 1: one time donors, donations go from low to highest values
+  # cluster 2: more than one donation up to normal (median) number of donations
+            #: values go from low to high, more donations tend to decrease value of donations
+
+
 
