@@ -8,7 +8,9 @@ library(plotly)
 library(fpc)
 library(factoextra)
 library(dbscan)
-
+library(magrittr)
+library(ggthemes)
+library(gridExtra)
 
 # Use: if we want to get pattern in data without a target variable
 # First part: Run the model K-means
@@ -153,8 +155,21 @@ clusplot(dataset_clustering,
          ylab = "COLUMN2")
 
 ## Option2
-ggplot(dataset_clustered_km, aes(x = number.donations, y = value.donations, color = factor(cluster.assigned))) +
-  geom_point(alpha = 0.5)
+plotAllClusters <- ggplot(dataset_clustered_km, aes(x = number.donations, y = value.donations, color = factor(cluster.assigned))) +
+  geom_point(alpha = 0.5) +
+  theme_economist() + 
+  scale_color_economist() + 
+  labs(subtitle = "", 
+       x = "Number of Donations", 
+       y = "Average Value of Donations") +
+  theme(
+    legend.position = "bottom", 
+    plot.title = element_text(size=20), 
+    plot.subtitle = element_text(size = 12), 
+    text = element_text(family = "Tahoma")
+        ) + 
+  guides(color=guide_legend(title= "Clusters"))
+
 
 
 
@@ -230,21 +245,210 @@ dataset_donations <- dataset_donations %>%
 
 ### Exploration on main dataset with clusters
 
-dataset_donations %>% 
-  group_by(donor.type, cluster.assigned) %>% 
-  summarize(count = n()) %>% 
-  View("count grouped source.group and cluster")
+# ## Grouped by donor.type
+# dataset_donations %>% 
+#   mutate(total.donations = sum(donation.amount)) %>% 
+#   group_by(donor.type) %>% 
+#   mutate(
+#     total.donors.group = n(),
+#     total.donations.group = sum(donation.amount)
+#     ) %>% 
+#   ungroup() %>% 
+#   group_by(donor.type, cluster.assigned) %>% 
+#   mutate(
+#     count.donors.clusters = n(),
+#     perc.count.donors = count.donors.clusters / total.donors.group,
+#     sum.clusters = sum(donation.amount),
+#     perc.sum.donations.group = sum.clusters / total.donations.group,
+#     perc.sum.donations.total = sum.clusters / total.donations
+#     ) %>% 
+#   distinct(donor.type, .keep_all = TRUE) %>%
+#   ungroup() %>% 
+#   select(
+#     donor.type, 
+#     cluster.assigned, 
+#     count.donors.clusters, 
+#     perc.count.donors, 
+#     sum.clusters, 
+#     perc.sum.donations.group,
+#     perc.sum.donations.total
+#     ) %>% 
+#   arrange(desc(perc.sum.donations.total, cluster.assigned)) %>% 
+#   View("count grouped source.group and cluster")
 
-addmargins(apply(dataset_donations, 2, is.na)) %>% tail(n=1) %>% View()
-NAs<- which(is.na(dataset_donations$cluster.assigned))
-dataset_donations[NAs,] %>% droplevels() %>% View()
-borrar <- setdiff(dataset_donations$donor.no, dataset_post_clustering$donor.no)
 
-dataset_donations %>% 
-  filter(donor.no %in% borrar) %>% View("Donors not included in clustering")
+######### Data Visualisation ##########
 
-> table(dataset_donations$donor.type)
-> table(dataset_donations$donor.category)
+## Grouped by donor.category
+dataset_viz_clustering <- dataset_donations %>% 
+  mutate(total.donations = sum(donation.amount)) %>% 
+  group_by(donor.category) %>% 
+  mutate(
+    total.donors.group = n(),
+    total.donations.group = sum(donation.amount)
+  ) %>% 
+  ungroup() %>% 
+  group_by(donor.category, cluster.assigned) %>% 
+  mutate(
+    count.donors.clusters = n(),
+    perc.count.donors = (count.donors.clusters / total.donors.group) * 100,
+    sum.clusters = sum(donation.amount),
+    perc.sum.donations.group = (sum.clusters / total.donations.group) * 100,
+    perc.sum.donations.total = (sum.clusters / total.donations) * 100
+  ) %>% 
+  distinct(donor.category, .keep_all = TRUE) %T>% print() %>% 
+  ungroup() %>% 
+  select(
+    donor.category, 
+    cluster.assigned, 
+    count.donors.clusters, 
+    perc.count.donors, 
+    sum.clusters, 
+    perc.sum.donations.group,
+    perc.sum.donations.total
+  ) %>% 
+  gather(index, value, -donor.category, -cluster.assigned) 
+
+
+### Percentage of donors  
+
+# Cluster 1, percentage of donors
+plotPercDonorsClus1 <- dataset_viz_clustering %>% 
+   filter(
+     cluster.assigned == 1,
+     index == "perc.count.donors"
+     ) %>% 
+   ggplot(aes(donor.category, value)) +
+   geom_col() +
+  labs(
+    title = "What percentage of donations of this category are inside this cluster?", 
+    subtitle = "Cluster 1", 
+    x = "", 
+    y = "% Donors"
+       ) +
+  theme_economist() + 
+  scale_color_economist() + 
+  theme(legend.position = "right", 
+        plot.title = element_text(size=13), 
+        plot.subtitle = element_text(size = 12), 
+        text = element_text(family = "Tahoma"),
+        axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) + 
+  guides(color=guide_legend(title= "Titulo leyenda"))
+
+
+# Cluster 2, percentage of donors
+plotPercDonorsClus2 <- dataset_viz_clustering %>% 
+  filter(
+    cluster.assigned == 2,
+    index == "perc.count.donors"
+  ) %>% 
+  ggplot(aes(donor.category, value)) +
+  geom_col() +
+  labs(
+    title = "",
+    subtitle = "Cluster 2", 
+    x = "", 
+    y = "% Donors"
+    ) +
+  theme_economist() + 
+  scale_color_economist() + 
+  theme(legend.position = "right", 
+        plot.title = element_text(size=20), 
+        plot.subtitle = element_text(size = 12), 
+        text = element_text(family = "Tahoma"),
+        axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) + 
+  guides(color=guide_legend(title= "Titulo leyenda"))
+
+# Cluster 3, percentage of donors
+plotPercDonorsClus3 <- dataset_viz_clustering %>% 
+  filter(
+    cluster.assigned == 3,
+    index == "perc.count.donors"
+  ) %>% 
+  ggplot(aes(donor.category, value)) +
+  geom_col() +
+  labs(subtitle = "Cluster 3", x = "", y = "% Donors") +
+  theme_economist() + 
+  scale_color_economist() + 
+  theme(legend.position = "right", 
+        plot.title = element_text(size=20), 
+        plot.subtitle = element_text(size = 12), 
+        text = element_text(family = "Tahoma"),
+        axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) + 
+  guides(color=guide_legend(title= "Titulo leyenda"))
+
+grid.arrange(plotPercDonorsClus1, plotPercDonorsClus2, plotPercDonorsClus3, plotAllClusters, nrow=2, ncol=2)
+
+
+
+### Percentage of total donations  
+
+# Cluster 1, percentage of donors
+plotPercTotalDonClus1 <- dataset_viz_clustering %>% 
+  filter(
+    cluster.assigned == 1,
+    index == "perc.sum.donations.total"
+  ) %>% 
+  ggplot(aes(donor.category, value)) +
+  geom_col() +
+  labs(
+    title = "What percentage of gobal donations are inside this cluster?", 
+    subtitle = "Cluster 1", 
+    x = "", 
+    y = "% Donors"
+  ) +
+  theme_economist() + 
+  scale_color_economist() + 
+  theme(legend.position = "right", 
+        plot.title = element_text(size=15), 
+        plot.subtitle = element_text(size = 12), 
+        text = element_text(family = "Tahoma"),
+        axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) + 
+  guides(color=guide_legend(title= "Titulo leyenda"))
+
+
+# Cluster 2, percentage of donors
+plotPercTotalDonClus2 <- dataset_viz_clustering %>% 
+  filter(
+    cluster.assigned == 2,
+    index == "perc.sum.donations.total"
+  ) %>% 
+  ggplot(aes(donor.category, value)) +
+  geom_col() +
+  labs(
+    title = "",
+    subtitle = "Cluster 2", 
+    x = "", 
+    y = "% Donors"
+  ) +
+  theme_economist() + 
+  scale_color_economist() + 
+  theme(legend.position = "right", 
+        plot.title = element_text(size=20), 
+        plot.subtitle = element_text(size = 12), 
+        text = element_text(family = "Tahoma"),
+        axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) + 
+  guides(color=guide_legend(title= "Titulo leyenda"))
+
+# Cluster 3, percentage of donors
+plotPercTotalDonClus3 <- dataset_viz_clustering %>% 
+  filter(
+    cluster.assigned == 3,
+    index == "perc.sum.donations.total"
+  ) %>% 
+  ggplot(aes(donor.category, value)) +
+  geom_col() +
+  labs(subtitle = "Cluster 3", x = "", y = "% Donors") +
+  theme_economist() + 
+  scale_color_economist() + 
+  theme(legend.position = "right", 
+        plot.title = element_text(size=20), 
+        plot.subtitle = element_text(size = 12), 
+        text = element_text(family = "Tahoma"),
+        axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) + 
+  guides(color=guide_legend(title= "Titulo leyenda"))
+
+grid.arrange(plotPercTotalDonClus1, plotPercTotalDonClus2, plotPercTotalDonClus3, plotAllClusters, nrow=2, ncol=2)
 
 
 # Insights:
@@ -254,4 +458,4 @@ dataset_donations %>%
             #: values go from low to high, more donations tend to decrease value of donations
 
 
-
+remove("borrar", "borrar2")
