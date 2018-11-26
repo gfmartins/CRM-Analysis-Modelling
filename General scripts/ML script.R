@@ -7,6 +7,10 @@ library(factoextra)
 library(ggthemes)
 library(gridExtra)
 library(plotly)
+library(parallel)
+library(corrplot)
+
+
 
 ########################  Cluster data (Unsupervised Learning) ########################  
 
@@ -112,68 +116,132 @@ dataset_ml <- dataset_donations %>%
   ## lifetime number, value donations, average days between donations
   group_by(donor.no) %>%
   mutate(
-    number.donations.total = mean(number.donation.year, na.rm = TRUE),
-    value.donations.total = mean(value.donations.year, na.rm = TRUE),
+    mean.number.donations = mean(number.donation.year, na.rm = TRUE),
+    mean.value.donations = mean(value.donations.year, na.rm = TRUE),
     diff = donation.date - lag(donation.date),
     diff.days = as.numeric(diff, units = 'days'),
     mean.diff.days = mean(diff.days, na.rm = TRUE),
-    days.between.donations = mean.diff.days / number.donations.total
+    days.between.donations = mean.diff.days / mean.number.donations,
+    counter.donation = sequence(n()),
+    value.previous.donation = case_when(lag(donation.amount) >= 30 ~ "High Value Donation",
+                                        lag(donation.amount) <= 30 ~ "Low Value Donation")
   ) %>%
   ungroup() %>%
   replace_na(list(days.between.donations = 0)) %>% 
+  mutate(binari.cluster = if_else(cluster.assigned == "2", "Low Value Cust", "High Value Cust")) %>% 
+  mutate_at(vars(binari.cluster), funs(as.factor)) %>% 
   # mutate_at(vars(diff), funs(as.numeric(., units = 'days'))) %>% 
-  filter(value.donations.total < 20000, number.donations.total < 30) %>% 
-  na.omit() %>%
-  select(-c(donor.no, 
-            donation.amount, 
-            donation.date, 
-            date.of.first.donation, 
-            donation.month, 
-            donation.year, 
-            number.donation.year, 
-            value.donations.year, 
-            diff, 
-            diff.days, 
-            mean.diff.days)
-         ) 
+  filter(mean.value.donations < 20000, mean.number.donations < 30) %>% 
+  na.omit()
+  
+  
 
-
-# 3) Prepare data
-
+# %>% 
+#   select(development.income:binari.cluster,
+#          cluster.assigned)
+        
+  
 # 2) Apply feature selection with Recursive Feature Elimination and corrplot
+
+# # Asses multicolinearity with the corrplot
+# ## Extract the numerical variables 
+# dataset_corr<- dataset_ml %>% select_if(is.numeric)
+# 
+# ## Compute the correlation matrix for these variables
+# corrMat<- cor(dataset_corr)
+# 
+# ## Plot the corrplot to see what value will be the cutoff
+# corrplot(corrMat, method = "ellipse")
+# 
+# # Te output will be the names of columns to eliminate
+# findCorrelation(corrMat, cutoff = 0.8, verbose = TRUE, names = TRUE,
+#                 exact = TRUE)
+
+
 ## See the independent variables that explain the most the predicted one with Recursive Feature
 ## When construncting the input dataset put the dependant variable at the end  
 library(mlbench)
 library(caret)
+library(randomForest)
+
+# Dataset for: What drives clients to be on a particular cluster?
+dataset_ml_2<- dataset_ml %>% 
+  droplevels() %>% 
+  distinct(donor.no, .keep_all = TRUE) %>% 
+  select(-c(
+    donation.amount,
+    donation.date,
+    date.of.first.donation,
+    donation.month,
+    donation.year,
+    number.donation.year,
+    value.donations.year,
+    diff,
+    diff.days,
+    mean.diff.days,
+    cluster.assigned,
+    mean.number.donations,
+    mean.value.donations,
+    group.name,
+    application,
+    payment.type,
+    income.stream,
+    donor.no)
+  )
+
+
+# Dataset for: What's the next donation activity after a particular donation activity?
+dataset_ml_3 <- dataset_ml %>% 
+  droplevels() %>% 
+  select(-c(donor.no,
+            donation.date,
+            donation.amount,
+            application,
+            payment.type,
+            date.of.first.donation,
+            number.of.donations,
+            income.stream,
+            days.between.donations,
+            donation.year,
+            number.donation.year,
+            value.donations.year,
+            mean.number.donations,
+            mean.value.donations,
+            diff,
+            diff.days,
+            mean.diff.days,
+            days.between.donations
+            ))
+  
+
 set.seed(7)
 ## Define the control using a Random Forest selection function
 control <- rfeControl(functions=rfFuncs, method="cv", number=10)
+
+## Utilize parallel computing for improving speed of processing
+no_cores <- detectCores() - 1
+cl <- makeCluster(no_cores, type="FORK")
+
 ## Run the RFE algorithm
-results <- rfe(dataset_ml[,"PUT THE COLUMN NUMBERS OF ALL independentV (e.g. 1:3)"], dataset_ml$dependantV, sizes=c("PUT THE COLUMN NUMBERS OF ALL independentV (e.g. 1:3)"), rfeControl=control)
+results <- rfe(dataset_ml_2[,1:8], dataset_ml_2$binari.cluster, sizes=c(1:8), rfeControl=control)
+
+# Stop parallel computing
+stopCluster(cl)
+
+
 ## Summarize the results
 print(results)
 ## Print a list of the most relevant features/variables
 predictors(results)
 ## Print the variables from least to most important (the output will be the column number)
-order(results$results$"Name of the metric used in the model", decreasing = TRUE) #normally is the first column of the table created with print(results)
+order(results$results$Accuracy, decreasing = TRUE) #normally is the first column of the table created with print(results)
 ## Plot the results
 plot(results, type=c("g", "o"))
 
 
-# Asses multicolinearity with the corrplot
-## Extract the numerical variables 
-dataset_corr<- dataset_ml %>% select_if(is.numeric)
 
-## Compute the correlation matrix for these variables
-corrMat<- cor(dataset_corr)
 
-library(corrplot)
-## Plot the corrplot to see what value will be the cutoff
-corrplot(corrMat, method = "ellipse")
-
-# Te output will be the names of columns to eliminate
-findCorrelation(corrMat, cutoff = 0.8, verbose = TRUE, names = TRUE,
-                exact = TRUE)
+    
 
 ## Conclutions: Im goint to include in the model the following variables
 
