@@ -127,12 +127,12 @@ dataset_ml <- dataset_donations %>%
                                         lag(donation.amount) <= 30 ~ "Low Value Donation")
   ) %>%
   ungroup() %>%
-  replace_na(list(days.between.donations = 0)) %>% 
+  replace_na(list(days.between.donations = 0, 
+                  value.previous.donation = "No Previous Donation")) %>% 
   mutate(binari.cluster = if_else(cluster.assigned == "2", "Low Value Cust", "High Value Cust")) %>% 
   mutate_at(vars(binari.cluster), funs(as.factor)) %>% 
   # mutate_at(vars(diff), funs(as.numeric(., units = 'days'))) %>% 
-  filter(mean.value.donations < 20000, mean.number.donations < 30) %>% 
-  na.omit()
+  filter(mean.value.donations < 20000, mean.number.donations < 30) 
   
   
 
@@ -165,6 +165,7 @@ library(caret)
 library(randomForest)
 
 # Dataset for: What drives clients to be on a particular cluster?
+## BE AWARE THAT THIS DATASET NEEDS REVISION, AS ITS JUST SHOWING FIRST DONATION
 dataset_ml_2<- dataset_ml %>% 
   droplevels() %>% 
   distinct(donor.no, .keep_all = TRUE) %>% 
@@ -187,7 +188,9 @@ dataset_ml_2<- dataset_ml %>%
     payment.type,
     income.stream,
     donor.no)
-  )
+  ) 
+# %>% 
+  # na.omit()
 
 
 # Dataset for: What's the next donation activity after a particular donation activity?
@@ -211,7 +214,8 @@ dataset_ml_3 <- dataset_ml %>%
             diff.days,
             mean.diff.days,
             days.between.donations
-            ))
+            )) %>% 
+  na.omit()
   
 
 set.seed(7)
