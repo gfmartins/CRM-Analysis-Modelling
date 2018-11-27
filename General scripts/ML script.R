@@ -9,6 +9,8 @@ library(gridExtra)
 library(plotly)
 library(parallel)
 library(corrplot)
+library(caTools)
+
 
 
 
@@ -124,45 +126,28 @@ dataset_ml <- dataset_donations %>%
     days.between.donations = mean.diff.days / mean.number.donations,
     counter.donation = sequence(n()),
     value.previous.donation = case_when(lag(donation.amount) >= 30 ~ "High Value Donation",
-                                        lag(donation.amount) <= 30 ~ "Low Value Donation")
+                                        lag(donation.amount) <= 30 ~ "Low Value Donation"),
+    binari.high.value.actual.donation = case_when(donation.amount >= 30 ~ "yes",
+                                      donation.amount <= 30 ~ "no"),
+    class.prev.development.income = lag(development.income),
+    class.prev.group.name = lag(group.name),
+    class.prev.payment.type = lag(payment.type)
   ) %>%
+  mutate_at(vars(class.prev.development.income:class.prev.payment.type), funs(as.character)) %>% 
   ungroup() %>%
+  # droplevels() %>% 
   replace_na(list(days.between.donations = 0, 
-                  value.previous.donation = "No Previous Donation")) %>% 
+                  value.previous.donation = "No Previous Donation", 
+                  class.prev.development.income = "No Previous Donation",
+                  class.prev.group.name = "No Previous Donation",
+                  class.prev.payment.type = "No Previous Donation")) %>%
   mutate(binari.cluster = if_else(cluster.assigned == "2", "Low Value Cust", "High Value Cust")) %>% 
   mutate_at(vars(binari.cluster), funs(as.factor)) %>% 
+  mutate_if(is.character, as.factor) %>% 
   # mutate_at(vars(diff), funs(as.numeric(., units = 'days'))) %>% 
   filter(mean.value.donations < 20000, mean.number.donations < 30) 
   
-  
 
-# %>% 
-#   select(development.income:binari.cluster,
-#          cluster.assigned)
-        
-  
-# 2) Apply feature selection with Recursive Feature Elimination and corrplot
-
-# # Asses multicolinearity with the corrplot
-# ## Extract the numerical variables 
-# dataset_corr<- dataset_ml %>% select_if(is.numeric)
-# 
-# ## Compute the correlation matrix for these variables
-# corrMat<- cor(dataset_corr)
-# 
-# ## Plot the corrplot to see what value will be the cutoff
-# corrplot(corrMat, method = "ellipse")
-# 
-# # Te output will be the names of columns to eliminate
-# findCorrelation(corrMat, cutoff = 0.8, verbose = TRUE, names = TRUE,
-#                 exact = TRUE)
-
-
-## See the independent variables that explain the most the predicted one with Recursive Feature
-## When construncting the input dataset put the dependant variable at the end  
-library(mlbench)
-library(caret)
-library(randomForest)
 
 # Dataset for: What drives clients to be on a particular cluster?
 ## BE AWARE THAT THIS DATASET NEEDS REVISION, AS ITS JUST SHOWING FIRST DONATION
@@ -187,13 +172,15 @@ dataset_ml_2<- dataset_ml %>%
     application,
     payment.type,
     income.stream,
+    class.prev.development.income,
+    class.prev.group.name,
     donor.no)
   ) 
 # %>% 
   # na.omit()
 
 
-# Dataset for: What's the next donation activity after a particular donation activity?
+# Dataset for: Given a first donation and its characteristics, what's going to be the next donation activity?
 dataset_ml_3 <- dataset_ml %>% 
   droplevels() %>% 
   select(-c(donor.no,
@@ -204,7 +191,34 @@ dataset_ml_3 <- dataset_ml %>%
             date.of.first.donation,
             number.of.donations,
             income.stream,
-            days.between.donations,
+            donation.year,
+            number.donation.year,
+            value.donations.year,
+            mean.number.donations,
+            mean.value.donations,
+            diff,
+            diff.days,
+            mean.diff.days,
+            binari.high.value.actual.donation,
+            days.between.donations
+            )) %>% 
+  select(everything(), -group.name, group.name) %>% 
+  na.omit()
+
+
+# Dataset for: Given a first donation and its characteristics, the next donation will be high or low value?
+dataset_ml_4 <- dataset_ml %>% 
+  droplevels() %>% 
+  select(-c(donor.no,
+            donation.date,
+            donation.amount,
+            application,
+            date.of.first.donation,
+            number.of.donations,
+            income.stream,
+            development.income, # replaced by class.prev.development.income
+            group.name, # replaced by class.prev.group.name
+            payment.type, # replaced by class.prev.payment.type
             donation.year,
             number.donation.year,
             value.donations.year,
@@ -214,183 +228,132 @@ dataset_ml_3 <- dataset_ml %>%
             diff.days,
             mean.diff.days,
             days.between.donations
-            )) %>% 
+  )) %>% 
+  select(everything(), -binari.high.value.actual.donation, binari.high.value.actual.donation) %>% 
   na.omit()
   
+########## Feature selection ########## 
+# # 2) Apply feature selection with Recursive Feature Elimination and corrplot
+# 
+# # Asses multicolinearity with the corrplot
+# ## Extract the numerical variables 
+# dataset_corr<- dataset_ml_3 %>% select_if(is.numeric)
+# 
+# ## Compute the correlation matrix for these variables
+# corrMat<- cor(dataset_corr)
+# 
+# ## Plot the corrplot to see what value will be the cutoff
+# corrplot(corrMat, method = "ellipse")
+# 
+# # Te output will be the names of columns to eliminate
+# findCorrelation(corrMat, cutoff = 0.8, verbose = TRUE, names = TRUE,
+#                exact = TRUE)
+# 
+# 
+# 
+# ## See the independent variables that explain the most the predicted one with Recursive Feature
+# ## When construncting the input dataset put the dependant variable at the end  
+# library(mlbench)
+# library(caret)
+# library(randomForest)
+# 
+# set.seed(7)
+# ## Define the control using a Random Forest selection function
+# control <- rfeControl(functions=rfFuncs, method="cv", number=10)
+# 
+# ## Utilize parallel computing for improving speed of processing
+# no_cores <- detectCores() - 1
+# cl <- makeCluster(no_cores, type="FORK")
+# 
+# ## Run the RFE algorithm
+# results <- rfe(dataset_ml_2[,1:8], dataset_ml_2$binari.cluster, sizes=c(1:8), rfeControl=control)
+# 
+# # Stop parallel computing
+# stopCluster(cl)
+# 
+# 
+# ## Summarize the results
+# print(results)
+# ## Print a list of the most relevant features/variables
+# predictors(results)
+# ## Print the variables from least to most important (the output will be the column number)
+# order(results$results$Accuracy, decreasing = TRUE) #normally is the first column of the table created with print(results)
+# ## Plot the results
+# plot(results, type=c("g", "o"))
 
-set.seed(7)
-## Define the control using a Random Forest selection function
-control <- rfeControl(functions=rfFuncs, method="cv", number=10)
-
-## Utilize parallel computing for improving speed of processing
-no_cores <- detectCores() - 1
-cl <- makeCluster(no_cores, type="FORK")
-
-## Run the RFE algorithm
-results <- rfe(dataset_ml_2[,1:8], dataset_ml_2$binari.cluster, sizes=c(1:8), rfeControl=control)
-
-# Stop parallel computing
-stopCluster(cl)
 
 
-## Summarize the results
-print(results)
-## Print a list of the most relevant features/variables
-predictors(results)
-## Print the variables from least to most important (the output will be the column number)
-order(results$results$Accuracy, decreasing = TRUE) #normally is the first column of the table created with print(results)
-## Plot the results
-plot(results, type=c("g", "o"))
+########## 4) Train the model ########## 
 
-
-
-
-    
-
-## Conclutions: Im goint to include in the model the following variables
-
-# Select the columns that are relevant
-dataset_ml<- dataset %>% select()
-
-
-
+########## Hipothesis: Given a first donation and its characteristics, what's going to be the next donation activity? ########## 
+# To do: Group events to maximum three categories (too many at me moment makes it difficult to group.name)
 
 # Randomize dataset
-random<- sample(nrow(dataset_ml))
-dataset_ml<- dataset_ml[random, ]
-
-# See if its neccesary to scale
-## If mean and SD vary among variables is better to scale
-## Mean of each variable
-colMeans(dataset_ml)
-## Standard deviation of each variable
-apply(dataset_ml, 2, sd)
-
-# Scale the data if neccesary (by preProcess = )
-library(caret)
-## Create an object with the pre processing parameters
-## Select the desired method, in this case is "scale"
-ObjectPreprocessParams <- preProcess(dataset_ml[,"COLUMNAS A MODIFICAR"], method=c("scale"))
-# summarize transform parameters
-print(ObjectPreprocessParams)
-## Transform the dataset using the parameters
-dataset_ml <- predict(ObjectPreprocessParams, dataset_ml[,"COLUMNAS A MODIFICAR"])
-# Summarize the transformed dataset
-summary(dataset_ml)
-
-## If neccesary apply dimensionality reduction (either manually {see NLPCA or PCA script} or by preProcess = )
+random<- sample(nrow(dataset_ml_3))
+dataset_ml_3<- dataset_ml_3[random, ]
 
 # Separar el training del test set
-library(caTools)
 set.seed(123)
 ## El sample.split se lo efectua con la variable dependiente
-split<- sample.split(dataset_ml$"dependentV", SplitRatio = "PORCENTAJE DE SEPARACION")
+split<- sample.split(dataset_ml_3$group.name, SplitRatio = 0.8)
 
 # Crear los sets de training y test
-training_set<- subset(dataset_ml, split == TRUE)
-test_set<- subset(dataset_ml, split == FALSE)
-
-
-# 4) Train the model
+training_set<- subset(dataset_ml_3, split == TRUE)
+test_set<- subset(dataset_ml_3, split == FALSE)
 
 # Create custom indices: myFolds
 ## This is for being able to run different models with the same folds and bein able to compare them (apples with apples)
-myFolds <- createFolds(training_set$"dependentV", k = 5)
-
-############# BINARY OUTPUT
-
-## If we want to have the ROC index of a binary classification algoritm instead of Accuracy
-# my_control <- trainControl(
-#   method = "cv",
-#   number = 10,
-#   summaryFunction = twoClassSummary,
-#   classProbs = TRUE,
-#   verboseIter = TRUE,
-#   savePredictions = TRUE,
-#   index = myFolds
-# )
-
+myFolds <- createFolds(training_set$group.name, k = 5)
 
 ############# NOT BINARY OUTPUT
 
 ## If we want accuracy of a not binary prediction
 my_control<- trainControl(
   method = "cv", 
-  number = 10,
-  verboseIter = TRUE,
-  savePredictions = TRUE, #if we are not comparing models after, dont use this
+  number = 10, 
+  verboseIter = TRUE, 
+  savePredictions = TRUE, 
   index = myFolds #if we are not comparing models after, dont use this
 )
 
 # Utilize parallel computing for improving speed of processing
 # Calculate the number of cores
-library(parallel)
 no_cores <- detectCores() - 1
 
 # Initiate cluster
 cl <- makeCluster(no_cores, type="FORK")
 
 
-################ BINARY OUTPUT
-#classifier <- train("dependentV" ~., 
-#                     data = training_set,
-#                     metric ="ROC", #THIS HAS TO BE SPECIFIED IF THE MODEL IS NOT "glm"
-#                     method = "NOMBRE del METODO",
-#                     tuneLenght = 10, #10 is a normal used value
-#                     trControl = my_control,
-#                     preProcess = c("OPTION1", "OPTIOPN2", "OPTION3"))
-
-## if random forest
-# classifier <- train("dependentV" ~.,
-#                     data = training_set,
-#                     metric ="ROC", 
-#                     method = "rf",
-#                     tuneLenght = 10, 
-#                     ntree = 500,
-#                     trControl = my_control
-# )
-
-
 ############### NOT BINARY OUTPUT
 ## If running multiple models and later comparing them (resamples()), remember to differenciate names of the classifiers
 
-classifier1 <- train("dependentV" ~.,
+classifier1 <- train(group.name ~ ., 
                      data = training_set,
-                     method = "NOMBRE DEL METODO",
-                     tuneLenght = 10, #10 is a normal used value
+                     method = 'ranger',
+                     tuneLength = 5, 
                      trControl = my_control,
-                     preProcess = c("OPTION1", "OPTIOPN2", "OPTION3") #if any (random forest doesn't need much for example)
+                     num.trees = 300,
+                     importance = "permutation"
 )
-
-
-classifier2 <- train("dependentV" ~.,
-                     data = training_set,
-                     method = "NOMBRE DEL METODO",
-                     tuneLenght = 10, #10 is a normal used value
-                     trControl = my_control,
-                     preProcess = c("OPTION1", "OPTIOPN2", "OPTION3") #if any (random forest doesn't need much for example)
-)
-
 
 # Stop parallel computing
 stopCluster(cl)
 
 # Print or plot the model to see the best hyperparamethers (optional)
 ## General information
-print(classifier)
+print(classifier1)
 ## The graph will show the tunning paramethers in X axis, and the indicator of its accuracy 
 ## The best tunning paramether will be the one with the highest point on Y axis
-plot(classifier)
+plot(classifier1)
 ## Print a summary of the final model
-classifier$finalModel
-classifier$resample
+classifier1$finalModel
+classifier1$resample
 ## After running the model see what variables were the most important
-varImp(object = classifier) 
+varImp(object = classifier1) 
 
 
 # 5) Model accuracy estimation
 
-####################### CLASSIFICATION #####################
 
 #### NOT BINARY OUTPUT
 # Predict 
@@ -413,25 +376,90 @@ y_pred <- predict.train(classifier, test_set, type = "raw")
 confusionMatrix(y_pred, test_set$dependentV)
 
 
-####################### REGRESSION #####################
 
-# Predict
-y_pred<- predict(classifier, test_set[,"COLUMNS WITH ALL independentVs"])
+########## Hipothesis: Given a first donation and its characteristics, te next donation is going to be high value? ########## 
 
-## Make a data frame with predicted values and real ones
-submit <- data.frame(Real = test_set$Occ, Predicted = y_pred)
-library(dplyr)
-submit %>% mutate(Variance = (1-(Predicted / Real))) %>% summarise(Percentage_Difference = mean(Variance)*100)
+# Randomize dataset
+random<- sample(nrow(dataset_ml_4))
+dataset_ml_4<- dataset_ml_4[random, ]
+
+# Separar el training del test set
+set.seed(123)
+## El sample.split se lo efectua con la variable dependiente
+split<- sample.split(dataset_ml_4$binari.high.value.actual.donation, SplitRatio = 0.8)
+
+# Crear los sets de training y test
+training_set<- subset(dataset_ml_4, split == TRUE)
+test_set<- subset(dataset_ml_4, split == FALSE)
+
+# Create custom indices: myFolds
+## This is for being able to run different models with the same folds and bein able to compare them (apples with apples)
+myFolds <- createFolds(training_set$binari.high.value.actual.donation, k = 5)
+
+############# BINARY OUTPUT
+
+# If we want to have the ROC index of a binary classification algoritm instead of Accuracy
+ my_control <- trainControl(
+   method = "cv", # Crossvalidation
+   number = 5, # Number of folds
+   summaryFunction = twoClassSummary, # The way we want to print the summary statistics
+   classProbs = TRUE, # Calculate probabilities
+   verboseIter = TRUE, # Print training log
+   savePredictions = TRUE, # If we are not comparing models after, dont use this
+   index = myFolds
+ )
+ 
+ # Utilize parallel computing for improving speed of processing
+ # Calculate the number of cores
+ no_cores <- detectCores() - 1
+ 
+ # Initiate cluster
+ cl <- makeCluster(no_cores, type="FORK")
+ 
+ 
+############### BINARY OUTPUT
+classifier <- train(binari.high.value.actual.donation ~., 
+                    data = training_set,
+                    metric ="ROC", #THIS HAS TO BE SPECIFIED IF THE MODEL IS NOT "glm"
+                    method = "ranger",
+                    trControl = my_control,
+                    num.trees = 200,
+                    importance = "permutation"
+)
+                    
+ 
+# Stop parallel computing
+stopCluster(cl)
+
+# Print or plot the model to see the best hyperparamethers (optional)
+## General information
+print(classifier)
+## The graph will show the tunning paramethers in X axis, and the indicator of its accuracy 
+## The best tunning paramether will be the one with the highest point on Y axis
+plot(classifier)
+## Print a summary of the final model
+classifier$finalModel
+classifier$resample
+## After running the model see what variables were the most important
+varImp(object = classifier) 
 
 
-# 6) Compare the models
-# Create model_list
-model_list <- list(item1 = classifier1, item2 = classifier2)
+# 5) Model accuracy estimation
 
-# Pass model_list to resamples(): resamples
-resamples<- resamples(model_list)
+####################### CLASSIFICATION #####################
 
-# Summarize the results
-summary(resamples)
+# #### BINARY OUTPUT 
+# # Predict 
+# ## When raw, the predictions will appear in format "yes", "no"
+# ## When prob, the predictions will appear in format 0.8 (probability of bein "yes" or "no")
+# y_pred <- predict.train(classifier, test_set, type = "raw")
+# y_pred <- predict.train(classifier, test_set, type = "prob")
+# 
+# # Add a threshold (example in logistic regresion with probability as an output)
+# # Predict 
+# y_pred<- ifelse(prob_pred > 0.5, 1, 0)
 
-
+# Make a confusion matrix
+## Type must be "raw"
+y_pred <- predict.train(classifier, test_set, type = "raw")
+confusionMatrix(y_pred, test_set$binari.high.value.actual.donation)
