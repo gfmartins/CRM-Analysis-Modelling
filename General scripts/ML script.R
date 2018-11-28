@@ -123,10 +123,12 @@ dataset_ml <- dataset_donations %>%
     diff = donation.date - lag(donation.date),
     diff.days = as.numeric(diff, units = 'days'),
     mean.diff.days = mean(diff.days, na.rm = TRUE),
+    ## Average number of days between donations
     days.between.donations = mean.diff.days / mean.number.donations,
     counter.donation = sequence(n()),
     value.previous.donation = case_when(lag(donation.amount) >= 30 ~ "High Value Donation",
                                         lag(donation.amount) <= 30 ~ "Low Value Donation"),
+    ## Threshold of what is a high or low donation
     binari.high.value.actual.donation = case_when(donation.amount >= 30 ~ "yes",
                                       donation.amount <= 30 ~ "no"),
     class.prev.development.income = lag(development.income),
@@ -418,7 +420,8 @@ myFolds <- createFolds(training_set$binari.high.value.actual.donation, k = 5)
  
  
 ############### BINARY OUTPUT
-classifier <- train(binari.high.value.actual.donation ~., 
+# Model without imbalance handling
+ classifier <- train(binari.high.value.actual.donation ~., 
                     data = training_set,
                     metric ="ROC", #THIS HAS TO BE SPECIFIED IF THE MODEL IS NOT "glm"
                     method = "ranger",
@@ -446,20 +449,91 @@ varImp(object = classifier)
 
 # 5) Model accuracy estimation
 
-####################### CLASSIFICATION #####################
-
-# #### BINARY OUTPUT 
-# # Predict 
-# ## When raw, the predictions will appear in format "yes", "no"
-# ## When prob, the predictions will appear in format 0.8 (probability of bein "yes" or "no")
-# y_pred <- predict.train(classifier, test_set, type = "raw")
-# y_pred <- predict.train(classifier, test_set, type = "prob")
-# 
-# # Add a threshold (example in logistic regresion with probability as an output)
-# # Predict 
-# y_pred<- ifelse(prob_pred > 0.5, 1, 0)
-
 # Make a confusion matrix
-## Type must be "raw"
+## Not balanced model
 y_pred <- predict.train(classifier, test_set, type = "raw")
 confusionMatrix(y_pred, test_set$binari.high.value.actual.donation)
+
+
+############# Model Prediction/Simulation ############# 
+
+## This table will contain the main values to replicate in dataset used to predict, and number of observations
+## E.g. if filtering certain week, it will pull related variables like month
+## Include in the filtering those variables that either won't be used for simulating or have a lot of related vars
+
+table_base_values_pred<- dataset_ml_4 %>% 
+  filter(donor.type == "Individual") %>% 
+  head(n = 10)
+
+## See names of columns to create de predict data frame
+colnames(dataset_ml_4)
+
+## Assign individual values
+cluster.assigned <- 1
+## Extract the values from table_base_values_pred
+donor.type <- table_base_values_pred$donor.type
+donor.category <- table_base_values_pred$donor.category
+## Variables that make no differences in the prediction can be assigned directly (randomly from table_base_values_pred)
+closest.retail.store <- table_base_values_pred$closest.retail.store
+# table(dataset_ml_4$donor.gender)
+donor.gender <- "Male"
+donation.month <- table_base_values_pred$donation.month
+# hist(dataset_ml_4$days.from.first.donation)
+days.from.first.donation<- 400
+counter.donation <- 2
+value.previous.donation<- "Low Value Donation"
+# table(dataset_ml_4$class.prev.development.income)
+class.prev.development.income <- "Events"
+# table(dataset_ml_4$class.prev.group.name)
+class.prev.group.name <- "Collection Box"
+# table(dataset_ml_4$class.prev.payment.type)
+class.prev.payment.type <- 4
+binari.cluster <- "Low Value Cust"
+
+# Data frame with simulation data
+predict_dataframe<- data.frame(cluster.assigned, 
+                               donor.type,
+                               donor.category,
+                               closest.retail.store,
+                               donor.gender,
+                               donation.month,
+                               days.from.first.donation,
+                               counter.donation,
+                               value.previous.donation,
+                               class.prev.development.income,
+                               class.prev.group.name,
+                               class.prev.payment.type,
+                               binari.cluster
+) %>% 
+  mutate_at(vars(cluster.assigned, class.prev.payment.type), funs(as.factor))
+
+# Predict the results
+
+#### BINARY OUTPUT 
+# Predict 
+## When raw, the predictions will appear in format "yes", "no"
+## When prob, the predictions will appear in format 0.8 (probability of bein "yes" or "no")
+y_pred <- predict.train(classifier, predict_dataframe, type = "raw")
+y_pred <- predict.train(classifier, predict_dataframe, type = "prob") 
+
+dataset_post_simulation <- predict_dataframe %>% 
+  mutate(predicts.high.actual.donation = y_pred) %>% 
+  select(cluster.assigned,
+         predicts.high.actual.donation,
+         binari.cluster,
+         days.from.first.donation,
+         value.previous.donation,
+         class.prev.development.income,
+         class.prev.group.name
+  )
+
+
+# # 6) Compare the models
+# # Create model_list
+# model_list <- list(item1 = classifier, item2 = classifier_smote)
+# 
+# # Pass model_list to resamples(): resamples
+# resamples<- resamples(model_list)
+# 
+# # Summarize the results
+# summary(resamples)
