@@ -1,0 +1,653 @@
+---
+title: "Donations Dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+    theme: flatly
+    orientation: columns
+    vertical_layout: fill
+runtime: shiny
+runApp: showcase
+---
+
+
+```{r global, include = FALSE}
+
+
+library(tidyverse)
+library(readxl)
+library(ggthemes)
+library(leaflet)
+library(plotly)
+
+
+########################  Import data ########################
+
+# Import main donations
+dataset_main_donations <-
+  read_csv(
+        "~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Support Services/Donorflex exports/dataset_main_donations.csv"
+  ) %>% 
+ ## Format all columns
+  mutate_at(vars(date.of.birth,
+                 donation.date), funs(as.Date(., format = '%d/%m/%Y'))) %>%
+  mutate_at(vars(donor.no,
+                 source:source.group), funs(as.factor)) %>%
+  mutate_at(vars(journal.no,
+                 donation.amount), funs(as.numeric)) %>%
+  mutate_at(vars(surname,
+                 forename,
+                 donor.postcode), funs(as.character)) 
+
+
+# IPU data
+
+# Import main referrals 
+dataset_referrals <- read_excel(
+  "~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Cinical Services 2015 - 13.06.2018/SystemOne exports final/Referral_Report_final.xlsx"
+) %>%
+  ## Delete this step when I have the ages on the dataset
+  rename_all(funs(tolower(make.names(.)))) %>%
+  rename_all(funs(gsub("_", ".", .))) %>%
+  separate(age, c("patient.age", "."), sep = "yrs") %>%
+  select(-.) %>% 
+  rename(service.offered.before.standarize = service.offered) %>%
+  filter(service.offered.before.standarize != "Marie Curie Rapid Response") %>%
+  mutate(
+    service.offered = case_when(
+      service.offered.before.standarize %in% c(
+        "In Patient",
+        "Inpatient - Emergency Respite",
+        "Inpatient - Psyco-social Support",
+        "Inpatient - Respite",
+        "Inpatient - Symptom Control",
+        "Lymphoedema",
+        "Advice/consultation",
+        "Day Hospice"
+      ) ~ "IPU",
+      service.offered.before.standarize %in% c(
+        "12 Week Program",
+        "Living Well Centre",
+        "Respiratory Group",
+        "Heart Failure Group",
+        "Palliative Medicine",
+        "Living Well Centre"
+      ) ~ "LWC"
+    )
+  ) %>%
+  mutate_at(vars(discharge.date, referral.date), funs(as.Date)) %>%
+  mutate_at(
+    vars(
+      referral.id,
+      referral.in.intervention.type,
+      service.offered.before.standarize,
+      nhs.number
+    ),
+    funs(as.character)
+  ) %>%
+  mutate_at(vars(patient.age), funs(as.numeric)) %>%
+  arrange(referral.date) %>%
+  group_by(nhs.number) %>%
+  mutate(spell = sequence(n())) %>%
+  ungroup() 
+
+
+
+ # Geo dataset
+ 
+ ## Import UK postcodes table (open data)
+ table_postcodes <-
+   read_csv(
+   "~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Support Services/ukpostcodes.csv"
+   ) %>%
+   rename_all(funs(tolower(make.names(.)))) %>%
+   rename_all(funs(gsub("_", ".", .))) %>%
+   select(
+     postcode, 
+     latitude, 
+     longitude
+     )
+   
+ ## Join IPU, CS data with UK postcodes to get the longitud and latitude
+ table_CS_postcodes <-
+   dataset_referrals %>%
+   inner_join(table_postcodes, by = "postcode")
+   
+ 
+ # Include postcodes of donations and IPU/CS patients into main dataset
+ dataset_donations_postcode_ipu <- dataset_main_donations %>%
+   left_join(table_postcodes, by = c("donor.postcode" = "postcode")) %>%
+   full_join(table_CS_postcodes, by = c("donor.postcode" = "postcode")) %>%
+   select(
+     donor.no,
+     nhs.number,
+     donor.postcode,
+     latitude.x,
+     longitude.x,
+     latitude.y,
+     longitude.y
+   ) %>%
+   mutate_if(is.factor, funs(as.character)) %>%
+   replace_na(list(donor.no = "noMatch", nhs.number = "noMatch")) %>%
+   mutate(
+     owner.of.postcode = case_when(
+     donor.no == "no match" ~ "justPatient",
+     nhs.number == "noMatch" ~ "justDonor",
+     !nhs.number == "noMatch" ~ "bothDonorAndPatient"
+   ),
+   latitude = coalesce(latitude.x, latitude.y),
+   longitude = coalesce(longitude.x, longitude.y),
+   copy.long = longitude,
+   copy.lat = latitude
+   ) %>%
+   unite(long.lat, copy.long, copy.lat) %>%
+   distinct(long.lat, .keep_all = TRUE)  %>%
+   mutate_at(vars(owner.of.postcode), funs(as.factor)) %>%
+   select(
+     latitude,
+     longitude,
+     owner.of.postcode
+     )
+   
+ ## Remove table containing UK postcodes to free up space
+ remove(table_postcodes)
+  
+
+```
+
+
+
+Monthly Comparison {data-width=700}
+====================
+
+Column {data-width=300 .sidebar}
+-----------------
+
+<br>
+
+```{r}
+
+
+## Select input to select graph
+selectInput(
+  inputId = "graphid",
+  label = "Select the Graph to Display",
+  choices =  c(
+  "Sum of Donations" = "sum.donations",
+  "Average of Donations" = "average.donations",
+  "Number of Donations" = "number.donations",
+  "New Donors" = "sum.new.donors",
+  "Total Donors" = "donors.per.month"
+  ),
+  multiple = FALSE
+  )
+
+# Date input
+dateRangeInput(
+  inputId = "dateid1",
+  label = "Select dates",
+  start = "2017-04-01",
+  end = Sys.Date(),
+  min = "1994-01-01",
+  max = Sys.Date(),
+  startview = "year"
+  )
+
+## INCLUDE THE NAMES OF EVERY NOMINAL CODE BUT EXRACT IT FROM DATABASE
+# Selection input of nominal code
+selectInput(
+  inputId = "nominalid",
+  label = "Select the Nominal Code",
+  choices = c("", levels(dataset_main_donations$nominal)),
+  multiple = FALSE
+  )
+
+# Selection input of source group code
+selectInput(
+  inputId = "sourcegroupid",
+  label = "Select the Source Group Code",
+  choices = NULL,
+  multiple = FALSE
+  )
+
+# Selection input of source code
+selectInput(
+  inputId = "sourceid",
+  label = "Select the Source Code",
+  choices = NULL,
+  multiple = FALSE
+  )
+
+# Selection input of to which level the data will be filtered
+radioButtons(
+  inputId = "levelsid",
+  label = "Select the Level of Detail of the Graph",
+  choices = c(
+  "By Nominal" = "nominal",
+  "By Source Group" = "source.group",
+  "By Source Code" = "source"
+  )
+  )
+
+## Boton to create plot
+actionButton(inputId = "actionid1",
+             label = "Clic to Initiate Graph")
+
+## Code for making the source.group and source input depend on the nominal code
+observeEvent(input$nominalid, {
+  filtered_donations1 <- dataset_main_donations %>%
+  filter(nominal == input$nominalid) %>%
+  distinct(source.group)
+  
+  updateSelectInput(session, "sourcegroupid", choices = c(filtered_donations1))
+  
+})
+
+observeEvent(input$sourcegroupid, {
+  filtered_donations2 <- dataset_main_donations %>%
+  filter(source.group == input$sourcegroupid) %>%
+  distinct(source)
+  
+  updateSelectInput(session, "sourceid", choices = c(filtered_donations2))
+  
+})
+
+dataset_donations_base <-  dataset_main_donations %>%
+  select(
+    donor.no,
+    journal.no,
+    donation.date,
+    nominal,
+    source.group,
+    source,
+    donation.day,
+    donation.week,
+    donation.month,
+    donation.year,
+    donation.amount,
+    payment.type
+  ) %>%
+  mutate(year.unite = strftime(.$donation.date, format = "%Y")) %>%
+  mutate(month.unite = strftime(.$donation.date, format = "%m")) %>%
+  unite(MY, month.unite, year.unite)
+  
+
+## Create reactive objects that will depend on date, nominal, source.group and source code
+
+## Reactive with general indexes of donations
+reactiveVizDonations <- reactive({
+  dataset_donations_base %>%
+  group_by_at(vars(MY, input$levelsid)) %>%
+  mutate(
+    sum.donations = sum(donation.amount, na.rm = TRUE),
+    average.donations = round(mean(donation.amount, na.rm = TRUE),2),
+    number.donations = n()
+  ) %>%
+  ungroup() %>%
+  distinct(MY, source, .keep_all = TRUE) 
+  
+})
+  
+
+## Reactive with new donors values 
+reactiveVizNewdonors <- reactive({
+  dataset_donations_base %>%
+  group_by_at(vars(input$levelsid, donor.no)) %>% 
+  mutate(donations.per.donor = n()) %>%
+  ungroup() %>%
+  filter(donations.per.donor == 1) %>%
+  group_by_at(vars(MY, input$levelsid)) %>%
+  mutate(sum.new.donors = n()) %>%
+  ungroup() %>%
+  select(
+    MY, 
+    sum.new.donors, 
+    nominal, 
+    source.group, 
+    source
+    ) %>%
+  distinct(MY, source, .keep_all = TRUE)
+  
+})
+
+# Reactive with total donors values
+reactiveVizTotaldonors <- reactive({
+  dataset_donations_base %>%
+  group_by_at(vars(MY, input$levelsid)) %>%
+  distinct(donor.no, .keep_all = TRUE) %>%
+  mutate(donors.per.month = n()) %>%
+  ungroup() %>%
+  select(
+    MY, 
+    donors.per.month, 
+    nominal, 
+    source.group, 
+    source
+  ) %>%
+  distinct(MY, source, .keep_all = TRUE)
+  
+})
+
+
+# Join all indexes calculated in a single tidied table
+reactiveVizGeneral <- reactive({
+  reactiveVizDonations() %>%
+  left_join(reactiveVizNewdonors(), by = c("MY", "nominal", "source.group", "source")) %>%
+  left_join(reactiveVizTotaldonors(), by = c("MY", "nominal", "source.group", "source")) %>%
+  select(
+    nominal,
+    source.group,
+    source,
+    donation.month,
+    donation.year,
+    donation.date,
+    MY,
+    sum.donations,
+    average.donations,
+    number.donations,
+    sum.new.donors,
+    donors.per.month
+  ) %>%
+  gather(index, value,-c(nominal:MY)) %>%
+  mutate_if(is.character, funs(as.factor)) %>%
+  select(
+    Donation.Date = donation.date,
+    Value = value,
+    Donation.Year = donation.year,
+    Donation.Month = donation.month,
+    everything()
+  )
+  
+})
+
+## Different outputs according to values selected by user
+reactiveDonationsFiltered <- reactive({
+  if (input$levelsid == "nominal") {
+  reactiveVizGeneral() %>%
+  filter(
+    Donation.Date >= input$dateid1[1] &
+    Donation.Date <= input$dateid1[2],
+    nominal == input$nominalid,
+    index == input$graphid
+  )
+
+
+  } else if (input$levelsid == "source.group") {
+    reactiveVizGeneral() %>%
+      filter(
+        Donation.Date >= input$dateid1[1] &
+        Donation.Date <= input$dateid1[2],
+        nominal == input$nominalid,
+        source.group == input$sourcegroupid,
+        index == input$graphid
+      )
+
+
+  } else if (input$levelsid == "source") {
+    reactiveVizGeneral() %>%
+      filter(
+        Donation.Date >= input$dateid1[1] &
+        Donation.Date <= input$dateid1[2],
+        nominal == input$nominalid,
+        source.group == input$sourcegroupid,
+        source == input$sourceid,
+        index == input$graphid
+      )
+  }
+  
+})
+
+
+```
+
+
+<style>
+body {
+text-align: left}
+</style>
+
+<br>
+
+**Monthly Comparison of Donations**
+
+This graph allows the user to compare across time, by month, different donation's indexes. 
+
+The data can be filtered by:
+
+* Nominal: A broad categorization of the Hospice's income sources
+<br>
+
+* Source Group: Generally a particular income generating activity
+<br>
+
+* Source: A specific category on any activity (e.g. tickets, raffles, etc.)
+
+By comparing different sources it is possible to note how donations are developing at the present compared to previous years, or set targets. 
+
+<br>
+
+
+column {data-width=700}
+----------------------
+
+### Barchart
+
+```{r}
+
+## Bar chart
+renderPlotly({
+  req(input$actionid1)
+  ggplotly(reactiveDonationsFiltered() %>%
+  ggplot(aes(Donation.Month, Value, fill = Donation.Year)) +
+  geom_col(position = "dodge") +
+  theme_economist_white() +
+  scale_fill_economist() +
+  labs(
+    x = "Date",
+    y = "Value",
+    fill = ""
+  ) +
+  theme(
+    legend.position = "right",
+    text = element_text(family = "Tahoma"),
+    plot.background = element_rect(fill = "white"),
+    plot.margin = unit(c(1, 3, 2, 2.5), "cm")
+  )
+  )
+})
+
+```
+
+
+Donations in Time {data-width=700}
+====================
+
+Column {data-width=300 .sidebar}
+-----------------
+
+<br>
+
+```{r}
+
+
+## Select input to select graph
+
+# Date input
+dateRangeInput(
+  inputId = "dateid2",
+  label = "Select dates",
+  start = "2017-04-01",
+  end = Sys.Date(),
+  min = "1994-01-01",
+  max = Sys.Date(),
+  startview = "year"
+  )
+
+# Selection input of nominal code
+selectInput(
+  inputId = "nominalid2",
+  label = "Select the Nominal Code",
+  choices = c("All", levels(dataset_main_donations$nominal)),
+  multiple = FALSE
+  )
+
+## Boton to create plot
+actionButton(inputId = "actionid2",
+             label = "Clic to Initiate Graph")
+
+
+## Create the reactive object that will contain the pct of digital payments 
+reactiveVizPercDigi <- reactive({
+  if (input$nominalid2 == "All") {
+  dataset_donations_base %>%
+  filter(
+    donation.date >= input$dateid2[1] &
+    donation.date <= input$dateid2[2]
+  ) %>%
+  group_by(MY) %>%
+  mutate(total.donations = sum(donation.amount, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(digi.or.phys = case_when(
+  payment.type %in% c(1, 2, 3, 4, 5, 10, 11, 12, 13, 16, 18, 20) ~ "Phys",
+  payment.type %in% c(14, 15, 17, 19) ~ "Digi"
+  )) %>%
+  mutate(
+    sum.digital = sum(.$digi.or.phys == "Digi", na.rm = TRUE),
+    sum.physical = sum(.$digi.or.phys == "Phys", na.rm = TRUE)
+  ) %>% 
+  mutate(
+    sum.physical.digital = .$sum.digital + .$sum.physical,
+    pct.digital.payments = round((sum.digital / sum.physical.digital) * 100, 2)
+  ) %>%
+  distinct(MY, .keep_all = TRUE) %>%
+  select(
+    Donation.Date = donation.date,
+    MY,
+    Total.Donations = total.donations,
+    Pct.Digital.Payments = pct.digital.payments
+  )
+  
+  } else {
+  dataset_donations_base %>%
+  filter(
+    donation.date >= input$dateid2[1] &
+    donation.date <= input$dateid2[2],
+    nominal == input$nominalid2
+  ) %>%
+  group_by(MY) %>%
+  mutate(total.donations = sum(donation.amount, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(digi.or.phys = case_when(
+  payment.type %in% c(1, 2, 3, 4, 5, 10, 11, 12, 13, 16, 18, 20) ~ "Phys",
+  payment.type %in% c(14, 15, 17, 19) ~ "Digi"
+  )) %>%
+  mutate(
+    sum.digital = sum(.$digi.or.phys == "Digi", na.rm = TRUE),
+    sum.physical = sum(.$digi.or.phys == "Phys", na.rm = TRUE)
+  ) %>% 
+  mutate(
+    sum.physical.digital = .$sum.digital + .$sum.physical,
+    pct.digital.payments = round((sum.digital / sum.physical.digital) * 100, 2)
+  ) %>%
+  distinct(MY, .keep_all = TRUE) %>%
+  select(
+    Donation.Date = donation.date,
+    MY,
+    Total.Donations = total.donations,
+    Pct.Digital.Payments = pct.digital.payments
+  )
+  
+  }
+})
+
+
+```
+
+
+<style>
+body {
+text-align: left}
+</style>
+
+<br>
+
+**Total Donations and Percentage of Digital Payments**
+
+This graph allows the user to compare the total of donations across time, as well as know the percentage (pct.) of digital payments done in the date range selected. Every point in the graph corresponds to a month.
+
+The data can be filtered by:
+
+* Nominal: A broad categorization of the Hospice's income sources
+<br>
+
+By comparing different nominal codes it is possible to note trends in donations, as well as discover which income sources are more digitalized.
+
+<br>
+
+column {data-width=700}
+----------------------
+
+### Line Chart
+
+
+```{r}
+
+# Line chart
+renderPlotly({
+  req(input$actionid2)
+  ggplotly((reactiveVizPercDigi()) %>%
+  ggplot(aes(Donation.Date, Total.Donations, label = Pct.Digital.Payments)) +
+  geom_line(
+    colour = "deepskyblue3", 
+    alpha = 0.8
+  )  +
+  geom_smooth(
+    method = "lm",
+    se = FALSE,
+    colour = "grey40"
+  ) +
+  theme_economist_white() +
+  scale_fill_economist() +
+  labs(
+    x = "Date",
+    y = "Value"
+  ) +
+  theme(
+    legend.position = "right",
+    text = element_text(family = "Tahoma"),
+    plot.background = element_rect(fill = "white"),
+    plot.margin = unit(c(1, 3, 2, 2.5), "cm")
+  )
+  )
+})
+
+
+```
+
+
+GeoData {data-width=700}
+====================
+
+### Postcodes of Donations and IPU Patients
+
+```{r}
+
+## Select the colors of the dots according to JustDonor or DonorAndPacient
+pal <- colorFactor(palette = c('red', 'blue', 'green'),
+                   domain = dataset_donations_postcode_ipu$owner.of.postcode)
+
+
+## Geoplot using Leaflet
+leaflet(dataset_donations_postcode_ipu) %>%
+  addTiles() %>%
+  setView(-1.581517, 54.77952, zoom = 9) %>%
+  addCircles(
+    lng = dataset_donations_postcode_ipu$longitude,
+    lat = dataset_donations_postcode_ipu$latitude,
+    label = dataset_donations_postcode_ipu$owner.of.postcode,
+    color = ~ pal(owner.of.postcode)
+  )
+
+
+```
+
+
