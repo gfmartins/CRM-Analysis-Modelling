@@ -463,32 +463,32 @@ confusionMatrix(y_pred, test_set$binari.high.value.actual.donation)
 
 table_base_values_pred<- dataset_ml_4 %>% 
   filter(donor.type == "Individual") %>% 
-  head(n = 10)
+  head(n = 5)
 
 ## See names of columns to create de predict data frame
 colnames(dataset_ml_4)
 
 ## Assign individual values
-cluster.assigned <- 1
+cluster.assigned <- 3
 ## Extract the values from table_base_values_pred
 donor.type <- table_base_values_pred$donor.type
 donor.category <- table_base_values_pred$donor.category
 ## Variables that make no differences in the prediction can be assigned directly (randomly from table_base_values_pred)
 closest.retail.store <- table_base_values_pred$closest.retail.store
 # table(dataset_ml_4$donor.gender)
-donor.gender <- "Male"
+donor.gender <- rep(c("Male", "Female"), length.out = 5)
 donation.month <- table_base_values_pred$donation.month
 # hist(dataset_ml_4$days.from.first.donation)
-days.from.first.donation<- 400
+days.from.first.donation<- rep(c(80, 500, 5000), length.out = 5)
 counter.donation <- 2
-value.previous.donation<- "Low Value Donation"
+value.previous.donation<- rep(c("Low Value Donation", "High Value Donation"), length.out = 5)
 # table(dataset_ml_4$class.prev.development.income)
 class.prev.development.income <- "Events"
 # table(dataset_ml_4$class.prev.group.name)
 class.prev.group.name <- "Collection Box"
 # table(dataset_ml_4$class.prev.payment.type)
 class.prev.payment.type <- 4
-binari.cluster <- "Low Value Cust"
+binari.cluster <- rep(c("Low Value Cust", "High Value Cust"), length.out = 5)
 
 # Data frame with simulation data
 predict_dataframe<- data.frame(cluster.assigned, 
@@ -514,7 +514,6 @@ predict_dataframe<- data.frame(cluster.assigned,
 ## When raw, the predictions will appear in format "yes", "no"
 ## When prob, the predictions will appear in format 0.8 (probability of bein "yes" or "no")
 y_pred <- predict.train(classifier, predict_dataframe, type = "raw")
-y_pred <- predict.train(classifier, predict_dataframe, type = "prob") 
 
 dataset_post_simulation <- predict_dataframe %>% 
   mutate(predicts.high.actual.donation = y_pred) %>% 
@@ -525,7 +524,7 @@ dataset_post_simulation <- predict_dataframe %>%
          value.previous.donation,
          class.prev.development.income,
          class.prev.group.name
-  )
+  ) %>% View()
 
 
 # # 6) Compare the models

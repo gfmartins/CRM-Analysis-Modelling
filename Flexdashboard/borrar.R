@@ -96,8 +96,55 @@ ggplotly(p1)
 
 
 
+################# Global Time-Series ################# 
 
-#   reactive_viz_general %>% 
-#   levels(.$index)
-# 
-# levels(reactive_viz_general$index)
+# Sum # Donations
+p1<- dataset_donations %>%
+  arrange(donation.date) %>%
+  unite(MY, donation.month, donation.year) %>%
+  group_by(MY) %>%
+  # mutate(CountDon = length(payment.type)) %>%
+  # arrange(donation.date) %>%
+  mutate(total.donations = sum(donation.amount)) %>% 
+  ungroup() %>% 
+  distinct(MY, .keep_all = TRUE) %>% 
+  select(donation.date, MY, total.donations) %>% 
+  ggplot(aes(donation.date, total.donations)) +
+  geom_line(colour = "darkorange1", alpha = 0.8)  +
+  geom_smooth(method = "loess", se = FALSE, colour = "grey40") + 
+  theme_economist_white() +
+  scale_fill_economist() + 
+  labs(x = "Date", 
+       y = "Value") +
+  theme(legend.position = "right", text = element_text(family = "Tahoma"), plot.background = element_rect(fill = "white"), plot.margin=unit(c(1,3,2,2.5),"cm"))
+
+
+ggplotly(p1)
+
+## Create filtered xts object
+vectorXTS_filtered<- xts(dataset_filtered$total.donations, order.by = (dataset_filtered$donation.date))
+
+# vectorXTS_filtered2<- xts(dataset_filtered2$donors.total, order.by = (dataset_filtered2$donation.date))
+
+# Create xts timeseries to ts
+vectorT<- vectorXTS_filtered %>%
+  coredata() %>%
+  as.ts()
+
+
+
+p1 <- autoplot(vectorT) + 
+  theme_economist_white() +
+  scale_fill_economist() + 
+  labs(x = "Date", 
+       y = "Value") +
+  theme(legend.position = "right", text = element_text(family = "Tahoma"), plot.background = element_rect(fill = "white"), plot.margin=unit(c(1,3,2,2.5),"cm"))
+
+
+
+dataset_donations %>% 
+  filter(nominal == "4080") %>% 
+  select(nominal, source.group, source) %>% 
+  View()
+
+

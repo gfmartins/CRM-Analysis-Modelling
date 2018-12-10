@@ -298,6 +298,7 @@ selectInput(
   multiple = FALSE
   )
 
+# Selection input of to which level the data will be filtered
 radioButtons(
   inputId = "levelsid",
   label = "Select the Level of Detail of the Graph",
@@ -576,7 +577,6 @@ actionButton(inputId = "actionid2",
 
 
 ## Create the reactive object that will contain the pct of digital payments 
-
 reactiveVizPercDigi <- reactive({
   if (input$nominalid2 == "All") {
   dataset_donations_base %>%
