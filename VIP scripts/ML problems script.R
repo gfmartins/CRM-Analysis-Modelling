@@ -166,7 +166,6 @@ dataset_ml_3 <- dataset_ml %>%
             # donation.amount,
             donation.month,
             value.previous.donation,
-            # closest.retail.store,
             application,
             # payment.type,
             class.prev.payment.type,
@@ -186,16 +185,16 @@ dataset_ml_3 <- dataset_ml %>%
             days.from.first.donation,
             class.prev.development.income,
             class.prev.group.name
+            # payment.type
             # group.name)
-            # payment.type,
             # closest.retail.store) # Include this variable when the grouping in clusters is done
   )
-  ) %>% 
+         ) %>% 
   filter(counter.donation %in% c(1,2)) %>% 
   group_by(donor.no) %>% 
   mutate(max.number.donations = max(counter.donation)) %>% 
   ungroup() %>% 
-  # mutate(binari.regular.giver = ifelse(acquisition.source %in% c("CAMPOC", "REGGIV","FRIEND", "GIVAYE"), "Yes", "No")) %>%
+  mutate(binari.regular.giver = ifelse(acquisition.source %in% c("CAMPOC", "REGGIV","FRIEND", "GIVAYE"), "Yes", "No")) %>%
   filter(counter.donation == 1) %>% 
   mutate(binari.second.donation = case_when(max.number.donations == 2 ~ "Yes",
                                             max.number.donations == 1 ~ "No")) %>% 
@@ -212,9 +211,10 @@ dataset_ml_3 <- dataset_ml %>%
 # To do: Group events to maximum three categories (too many at me moment makes it difficult to group.name)
 
 # Randomize dataset
+set.seed(234)
 random<- sample(nrow(dataset_ml_3), 5000)
 # random<- sample(nrow(dataset_ml_3))
-dataset_ml_3<- dataset_ml_3[random, ]
+# dataset_ml_3<- dataset_ml_3[random, ]
 
 # Separar el training del test set
 set.seed(123)
@@ -268,7 +268,7 @@ classifier <- train(binari.second.donation ~.,
                     method = "ranger",
                     trControl = my_control,
                     num.trees = 500,
-                    # tuneGrid = tgrid,
+                    tuneGrid = tgrid,
                     importance = "permutation"
 )
 
