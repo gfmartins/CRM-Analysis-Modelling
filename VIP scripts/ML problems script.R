@@ -97,6 +97,7 @@ dataset_ml <- dataset_donations %>%
     application,
     payment.type,
     donor.type,
+    source,
     donor.category,
     closest.retail.store,
     donor.gender,
@@ -139,12 +140,77 @@ dataset_ml <- dataset_donations %>%
   ) %>%
   mutate_at(vars(class.prev.development.income:class.prev.payment.type), funs(as.character)) %>% 
   ungroup() %>%
+  mutate(activity.clusters = case_when(source %in% c("STRTIC",
+                                                     "STRREG",
+                                                     "STRSPO",
+                                                     "DOGREG",
+                                                     "DOGSPO",
+                                                     "LLUTIC",
+                                                     "GNTTIC",
+                                                     "CLRREG",
+                                                     "CLRSPO",
+                                                     "GOLDON",
+                                                     "GOLREG",
+                                                     "MIDREG",
+                                                     "MIDSPO",
+                                                     "FIRTIC",
+                                                     "CINTIC",
+                                                     "SILTIC") ~ "Cluster Events",
+                                       source %in% c("SEVONE",
+                                                     "SEVCOF",
+                                                     "SEVCEL", 
+                                                     "SEVGNR",
+                                                     "INDFUN",
+                                                     "GNRREG",
+                                                     "CELDON",
+                                                     "CELBDG",
+                                                     "SGPCCT",
+                                                     "SGPWCT",
+                                                     "SKYREG",
+                                                     "SKYSPO") ~ "Cluster Supporter Led Giving",
+                                       source %in% c("COYOTH",
+                                                     "COYDON",
+                                                     "COYSPO",
+                                                     "COYCOL",
+                                                     "COYGLO",
+                                                     "88CMEM",
+                                                     "COLBOX",
+                                                     "STRCOR",
+                                                     "DOGCOR",
+                                                     "LLUCOR",
+                                                     "GNTCOR",
+                                                     "CLRCOR",
+                                                     "GOLCOR",
+                                                     "MIDCOR",
+                                                     "FIRCOR",
+                                                     "CINCOR",
+                                                     "SILCOR") ~ "Cluster Corporate Giving",
+                                       source %in% c("REGGIV",
+                                                     "FRIEND",
+                                                     "CAMPOC",
+                                                     "GIVAYE") ~ " Cluster Regular Giving",
+                                       source %in% c("INMEMO", 
+                                                     "INMCOL") ~ "Cluster In Memory Donations/Collections",
+                                       source %in% c("INMTRE", 
+                                                     "SUNDON", 
+                                                     "LIGDON") ~ "Cluster In Memory Campaign/Product",
+                                       source %in% c("PFDDON",
+                                                     "GENDON",
+                                                     "RAFTIC",
+                                                     "RAFDON",
+                                                     "DONINS",
+                                                     "30ADON") ~ "Cluster Individual Giving",
+                                       source %in% c("LEGDON") ~ "Cluster Legacy Donors",
+                                       source %in% c("TRUSTS",
+                                                     "TRUSUN") ~ "Cluster Trusts")
+  ) %>% 
   # droplevels() %>% 
   replace_na(list(days.between.donations = 0, 
                   diff.days = 0,
                   value.previous.donation = "No Previous Donation", 
                   class.prev.development.income = "No Previous Donation",
                   class.prev.group.name = "No Previous Donation",
+                  activity.clusters = "Not Clustered",
                   class.prev.payment.type = "No Previous Donation")) %>%
   mutate(binari.cluster = if_else(cluster.assigned == "2", "Low Value Cust", "High Value Cust")) %>% 
   mutate_at(vars(binari.cluster), funs(as.factor)) %>% 
@@ -195,14 +261,17 @@ dataset_ml_3 <- dataset_ml %>%
   mutate(max.number.donations = max(counter.donation)) %>% 
   ungroup() %>% 
   mutate(binari.regular.giver = ifelse(acquisition.source %in% c("CAMPOC", "REGGIV","FRIEND", "GIVAYE"), "Yes", "No")) %>%
-  filter(counter.donation == 1) %>% 
+  # filter(counter.donation == 1) %>% 
   mutate(binari.second.donation = case_when(max.number.donations == 2 ~ "Yes",
                                             max.number.donations == 1 ~ "No")) %>% 
   mutate_at(vars(binari.second.donation), funs(as.factor)) %>% 
   distinct(donor.no, .keep_all = TRUE) %>% 
-  select(-c(donor.no, max.number.donations, counter.donation)) %>% 
-  na.omit()  
-
+  na.omit() %>% 
+  # filter(binari.regular.giver == "No",
+  #        !payment.type %in% "19") %>% 
+  # mutate_if(is.character, as.factor) %>% 
+  select(-c(donor.no, max.number.donations, counter.donation, binari.regular.giver))
+  
 
 
 ########## 4) Train the model ########## 
@@ -212,9 +281,9 @@ dataset_ml_3 <- dataset_ml %>%
 
 # Randomize dataset
 set.seed(234)
-random<- sample(nrow(dataset_ml_3), 5000)
-# random<- sample(nrow(dataset_ml_3))
-# dataset_ml_3<- dataset_ml_3[random, ]
+# random<- sample(nrow(dataset_ml_3), 10000)
+random<- sample(nrow(dataset_ml_3))
+dataset_ml_3<- dataset_ml_3[random, ]
 
 # Separar el training del test set
 set.seed(123)
@@ -254,7 +323,7 @@ cl <- makeCluster(no_cores, type="FORK")
 ## If running multiple models and later comparing them (resamples()), remember to differenciate names of the classifiers
 
 tgrid <- expand.grid(
-  .mtry = 135,
+  .mtry = 134,
   .splitrule = "gini",
   .min.node.size = c(1)
 )
@@ -268,7 +337,7 @@ classifier <- train(binari.second.donation ~.,
                     method = "ranger",
                     trControl = my_control,
                     num.trees = 500,
-                    tuneGrid = tgrid,
+                    # tuneGrid = tgrid,
                     importance = "permutation"
 )
 
