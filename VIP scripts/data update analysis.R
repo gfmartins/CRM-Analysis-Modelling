@@ -1,5 +1,6 @@
 library(readr)
 library(tidyverse)
+library(readxl)
 
 ################# Past Import #################
 
@@ -267,84 +268,118 @@ dataset_donations <-
     donor.town = town
   ) 
 
+######## UPDATE WITH 
+ # IPU, CS dataset
+ 
+# IPU data
 
-# # IPU, CS dataset
-# 
-# dataset_oacc<- read_excel("~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Cinical Services 2015 - 13.06.2018/New Format Datasets/OACC_dataset.xlsx") %>%
-#   rename_all(funs(tolower(make.names(.)))) %>%
-#   rename_all(funs(gsub("_", ".", .))) %>%
-#   mutate_at(vars(q2.pain:q9.practical.matters.addressed, quality.of.life.before.admission.to.spct:lost.control), funs(as.numeric)) %>%
-#   mutate_if(is.character, funs(as.factor)) %>% 
-#   mutate_at(vars(anonymous.patient.id), funs(as.factor)) %>%
-#   mutate_at(vars(date.of.contact), funs(as.Date)) %>%
-#   group_by(date.of.contact) %>%
-#   mutate(mean.age = round(mean(patient.age),0)) %>%
-#   select(anonymous.patient.id, spell, date.of.contact) %>%
-#   ungroup()
-# 
-# ### IPU
-# ## Import IPU dataset
-# dataset_ipu<- read_excel("~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Cinical Services 2015 - 13.06.2018/New Format Datasets/IPU_dataset.xlsx") %>%
-#   rename_all(funs(tolower(make.names(.)))) %>%
-#   rename_all(funs(gsub("_", ".", .))) %>%
-#   mutate_if(is.character, funs(as.factor)) %>%
-#   mutate_at(vars(nhs.number), funs(as.factor)) %>%
-#   mutate_at(vars(date.of.admission..dd.mm.yyyy.), funs(as.Date)) %>% 
-#   select(nhs.number, spell, date.of.admission..dd.mm.yyyy., postcode)
-# 
-# ### IPU, OACC
-# ## Join datasets IPU and OACC
-# dataset_ipu_oacc<- dataset_oacc %>%
-#   left_join(dataset_ipu, by = c("anonymous.patient.id" =  "nhs.number", "spell"))
-# 
-# 
-# # Geo dataset
-# 
-# ## Import UK postcodes table (open data)
-# table_postcodes <-
-#   read_csv(
-#     "~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Support Services/ukpostcodes.csv"
-#   ) %>%
-#   rename_all(funs(tolower(make.names(.)))) %>%
-#   rename_all(funs(gsub("_", ".", .))) %>%
-#   select(postcode, latitude, longitude)
-# 
-# ## Join IPU, CS data with UK postcodes to get the longitud and latitude
-# table_CS_postcodes <-
-#   dataset_ipu_oacc %>%
-#   inner_join(table_postcodes, by = "postcode") 
-# 
-# 
-# # Include postcodes of donations and IPU/CS patients into main dataset
-# dataset_donations_postcode_ipu <- dataset_donations %>%
-#   left_join(table_postcodes, by = c("donor.postcode" = "postcode")) %>%
-#   full_join(table_CS_postcodes, by = c("donor.postcode" = "postcode")) %>%
-#   select(donor.no, 
-#          anonymous.patient.id, 
-#          donor.postcode, 
-#          latitude.x, longitude.x, 
-#          latitude.y, longitude.y) %>% 
-#   mutate_if(is.factor, funs(as.character)) %>% 
-#   replace_na(list(donor.no = "noMatch", anonymous.patient.id = "noMatch")) %>% 
-#   mutate(owner.of.postcode = case_when(donor.no == "no match" ~ "justPatient",
-#                                    anonymous.patient.id == "noMatch" ~ "justDonor",
-#                                    !anonymous.patient.id == "noMatch" ~ "bothDonorAndPatient"),
-#          latitude = coalesce(latitude.x, latitude.y),
-#          longitude = coalesce(longitude.x, longitude.y),
-#          copy.long = longitude,
-#          copy.lat = latitude) %>% 
-#   unite(long.lat, copy.long, copy.lat) %>% 
-#   distinct(long.lat, .keep_all = TRUE)  %>% 
-#   mutate_at(vars(owner.of.postcode), funs(as.factor)) %>% 
-#   select(latitude,
-#          longitude,
-#          owner.of.postcode)
-#   
-# remove(table_postcodes)
+# Import main referrals 
+dataset_referrals <- read_csv(
+  "~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Cinical Services 2015 - 13.06.2018/SystemOne and Excel final/Referral_Report_Final_Complete.csv"
+) %>%
+  ## Delete this step when I have the ages on the dataset
+  rename_all(funs(tolower(make.names(.)))) %>%
+  rename_all(funs(gsub("_", ".", .))) %>%
+  separate(age, c("patient.age", "."), sep = "yrs") %>%
+  select(-.) %>% 
+  rename(service.offered.before.standarize = service.offered) %>%
+  filter(service.offered.before.standarize != "Marie Curie Rapid Response") %>%
+  mutate(
+    service.offered = case_when(
+      service.offered.before.standarize %in% c(
+        "In Patient",
+        "Inpatient - Emergency Respite",
+        "Inpatient - Psyco-social Support",
+        "Inpatient - Respite",
+        "Inpatient - Symptom Control",
+        "Lymphoedema",
+        "Advice/consultation",
+        "Day Hospice"
+      ) ~ "IPU",
+      service.offered.before.standarize %in% c(
+        "12 Week Program",
+        "Living Well Centre",
+        "Respiratory Group",
+        "Heart Failure Group",
+        "Palliative Medicine",
+        "Living Well Centre"
+      ) ~ "LWC"
+    )
+  ) %>%
+  mutate_at(vars(discharge.date, referral.date), funs(as.Date)) %>%
+  mutate_at(
+    vars(
+      referral.id,
+      referral.in.intervention.type,
+      service.offered.before.standarize,
+      nhs.number
+    ),
+    funs(as.character)
+  ) %>%
+  mutate_at(vars(patient.age), funs(as.numeric)) %>%
+  arrange(referral.date) %>%
+  group_by(nhs.number) %>%
+  mutate(spell = sequence(n())) %>%
+  ungroup() 
 
 
 
-# # Save the coordinates of a city in a vector (search in google )
-# ### In this case Durham
-# Coord.City <- c(lon = -1.581517, lat = 54.77952)
+# Geo dataset
+
+## Import UK postcodes table (open data)
+table_postcodes <-
+  read_csv(
+    "~/Google Drive/Data Analysis/Bases de Datos/St. Cuthberts/Support Services/ukpostcodes.csv"
+  ) %>%
+  rename_all(funs(tolower(make.names(.)))) %>%
+  rename_all(funs(gsub("_", ".", .))) %>%
+  select(
+    postcode, 
+    latitude, 
+    longitude
+  )
+
+## Join IPU, CS data with UK postcodes to get the longitud and latitude
+table_CS_postcodes <-
+  dataset_referrals %>%
+  inner_join(table_postcodes, by = "postcode")
+
+
+# Include postcodes of donations and IPU/CS patients into main dataset
+dataset_donations_postcode_ipu <- dataset_main_donations %>%
+  left_join(table_postcodes, by = c("donor.postcode" = "postcode")) %>%
+  full_join(table_CS_postcodes, by = c("donor.postcode" = "postcode")) %>%
+  select(
+    donor.no,
+    nhs.number,
+    donor.postcode,
+    latitude.x,
+    longitude.x,
+    latitude.y,
+    longitude.y
+  ) %>%
+  mutate_if(is.factor, funs(as.character)) %>%
+  replace_na(list(donor.no = "noMatch", nhs.number = "noMatch")) %>%
+  mutate(
+    owner.of.postcode = case_when(
+      donor.no == "no match" ~ "justPatient",
+      nhs.number == "noMatch" ~ "justDonor",
+      !nhs.number == "noMatch" ~ "bothDonorAndPatient"
+    ),
+    latitude = coalesce(latitude.x, latitude.y),
+    longitude = coalesce(longitude.x, longitude.y),
+    copy.long = longitude,
+    copy.lat = latitude
+  ) %>%
+  unite(long.lat, copy.long, copy.lat) %>%
+  distinct(long.lat, .keep_all = TRUE)  %>%
+  mutate_at(vars(owner.of.postcode), funs(as.factor)) %>%
+  select(
+    latitude,
+    longitude,
+    owner.of.postcode
+  )
+
+## Remove table containing UK postcodes to free up space
+remove(table_postcodes)
 
