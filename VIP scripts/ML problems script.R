@@ -10,7 +10,8 @@ library(plotly)
 library(parallel)
 library(corrplot)
 library(caTools)
-
+library(rpart.plot)
+library(readr)
 ########################  Cluster data (Unsupervised Learning) ########################  
 
 ### Prepare data
@@ -105,8 +106,8 @@ dataset_ml <- dataset_donations %>%
     number.of.donations,
     # income.stream,
     donation.month,
-    donation.year,
-    acquisition.source
+    donation.year
+    # acquisition.source
   ) %>%
   # Perform feature creation
   mutate(days.from.first.donation = difftime(Sys.time(), date.of.first.donation, units = "days")) %>% 
@@ -233,6 +234,7 @@ dataset_ml_3 <- dataset_ml %>%
             donation.month,
             value.previous.donation,
             application,
+            # source, # will be deleted later
             # payment.type,
             class.prev.payment.type,
             date.of.first.donation,
@@ -252,7 +254,7 @@ dataset_ml_3 <- dataset_ml %>%
             class.prev.development.income,
             class.prev.group.name
             # payment.type
-            # group.name)
+            # group.name
             # closest.retail.store) # Include this variable when the grouping in clusters is done
   )
          ) %>% 
@@ -260,7 +262,7 @@ dataset_ml_3 <- dataset_ml %>%
   group_by(donor.no) %>% 
   mutate(max.number.donations = max(counter.donation)) %>% 
   ungroup() %>% 
-  mutate(binari.regular.giver = ifelse(acquisition.source %in% c("CAMPOC", "REGGIV","FRIEND", "GIVAYE"), "Yes", "No")) %>%
+  mutate(binari.regular.giver = ifelse(source %in% c("CAMPOC", "REGGIV","FRIEND", "GIVAYE"), "Yes", "No")) %>%
   # filter(counter.donation == 1) %>% 
   mutate(binari.second.donation = case_when(max.number.donations == 2 ~ "Yes",
                                             max.number.donations == 1 ~ "No")) %>% 
@@ -270,19 +272,19 @@ dataset_ml_3 <- dataset_ml %>%
   # filter(binari.regular.giver == "No",
   #        !payment.type %in% "19") %>% 
   # mutate_if(is.character, as.factor) %>% 
-  select(-c(donor.no, max.number.donations, counter.donation, binari.regular.giver))
+  select(-c(donor.no, max.number.donations, counter.donation, source, group.name))
   
 
 
-########## 4) Train the model ########## 
+########## Train the Random Forest model ########## 
 
 ### Hipothesis: Given a first donation and its characteristics, what's going to be the next donation activity?
 # To do: Group events to maximum three categories (too many at me moment makes it difficult to group.name)
 
 # Randomize dataset
 set.seed(234)
-# random<- sample(nrow(dataset_ml_3), 10000)
-random<- sample(nrow(dataset_ml_3))
+random<- sample(nrow(dataset_ml_3), 5000)
+# random<- sample(nrow(dataset_ml_3))
 dataset_ml_3<- dataset_ml_3[random, ]
 
 # Separar el training del test set
@@ -298,7 +300,6 @@ test_set<- subset(dataset_ml_3, split == FALSE)
 ## This is for being able to run different models with the same folds and bein able to compare them (apples with apples)
 myFolds <- createFolds(training_set$binari.second.donation, k = 5)
 
-############# NOT BINARY OUTPUT
 
 # If we want to have the ROC index of a binary classification algoritm instead of Accuracy
  my_control <- trainControl(
@@ -319,27 +320,28 @@ no_cores <- detectCores() - 1
 cl <- makeCluster(no_cores, type="FORK")
 
 
-############### NOT BINARY OUTPUT
+# Random Forest
 ## If running multiple models and later comparing them (resamples()), remember to differenciate names of the classifiers
 
-tgrid <- expand.grid(
-  .mtry = 239,
-  .splitrule = "gini",
-  .min.node.size = c(1)
-)
+ tgrid <- expand.grid(
+   .mtry = 38,
+   .splitrule = "gini",
+   .min.node.size = c(1)
+ )
 
 
 # Make the classifier
 ### BINARY OUTPUT
-classifier <- train(binari.second.donation ~., 
-                    data = training_set,
-                    metric ="ROC", #THIS HAS TO BE SPECIFIED IF THE MODEL IS NOT "glm"
-                    method = "ranger",
-                    trControl = my_control,
-                    num.trees = 500,
-                    tuneGrid = tgrid,
-                    importance = "permutation"
-)
+
+ classifier <- train(binari.second.donation ~., 
+                     data = training_set,
+                     metric ="ROC", #THIS HAS TO BE SPECIFIED IF THE MODEL IS NOT "glm"
+                     method = "ranger",
+                     trControl = my_control,
+                     num.trees = 500,
+                     tuneGrid = tgrid,
+                     importance = "permutation"
+ )
 
 
 # Stop parallel computing
@@ -359,92 +361,106 @@ varImp(object = classifier)
 
 
 # 5) Model accuracy estimation
-
-####################### CLASSIFICATION
-
-#### NOT BINARY OUTPUT 
 # Check the metrics of the model
 classifier$resample
 
-
-#### BINARY OUTPUT 
 # Make a confusion matrix
 ## Type must be "raw"
 y_pred <- predict.train(classifier, test_set, type = "raw")
 confusionMatrix(y_pred, test_set$binari.second.donation)
 
 
-############# Model Prediction/Simulation ############# 
+# ############# Model Prediction/Simulation of Random Forest Model ############# 
+# 
+# ## This table will contain the main values to replicate in dataset used to predict, and number of observations
+# ## E.g. if filtering certain week, it will pull related variables like month
+# ## Include in the filtering those variables that either won't be used for simulating or have a lot of related vars
+# table_base_values_pred<- dataset_ml %>% 
+#   filter("VARIABLE TO FILTER" == "VALUE TO FILTER") %>% 
+#   head(n = 10)
+# 
+# ## See names of columns to create de predict data frame
+# colnames(dataset_ml)
+# 
+# ## Assign individual values
+# cluster.assigned <- 1
+# donation.amount <- 25
+# development.income <- 1
+# group.name <- 1
+# payment.type <- 1
+# donor.type <- 1
+# donor.category <- 1
+# donor.gender <- 1
+# donation.month <- 1
+# donation.month <- 1
+# donation.month <- 1
+# donation.month <- 1
+# 
+# 
+# 
+# ## Extract the values from table_base_values_pred
+# "VARIABLE" <- table_base_values_pred$"VARIABLE TO EXTRACT"
+# ## Variables that make no differences in the prediction can be assigned directly (randomly from table_base_values_pred)
+# "VARIABLE" <- table_base_values_pred$"VARIABLE TO EXTRACT"
+# 
+# # Data frame with simulation data
+# predict_dataframe<- data.frame(
+#   "VARIABLE",
+#   "VARIABLE",
+#   "VARIABLE"
+# ) 
+# 
+# # Predict the results
+# 
+# ####################### CLASSIFICATION
+# 
+# #### BINARY OUTPUT 
+# # Predict 
+# ## When raw, the predictions will appear in format "yes", "no"
+# ## When prob, the predictions will appear in format 0.8 (probability of bein "yes" or "no")
+# y_pred <- predict.train(classifier, predict_dataframe, type = "raw")
+# y_pred <- predict.train(classifier, predict_dataframe, type = "prob") 
+# 
+# ## In this example its assumed that type = "raw"
+# dataset_post_simulation <- predict_dataframe %>% 
+#   mutate("predicts.WHAT.IS.BEING.PREDICTED" = y_pred)
+# 
+# 
+# #### NOT BINARY OUTPUT
+# # Predict 
+# y_pred<- predict(classifier, test_set[,"COLUMNS WITH ALL independentVs"])
+# 
+# dataset_post_simulation <- predict_dataframe %>% 
+#   mutate("predicts.WHAT.IS.BEING.PREDICTED" = y_pred)
+# 
+# 
+# ####################### REGRESSION
+# 
+# # Predict
+# y_pred<- predict(classifier, test_set[,"COLUMNS WITH ALL independentVs"])
+# 
+# dataset_post_simulation <- predict_dataframe %>% 
+#   mutate("predicts.WHAT.IS.BEING.PREDICTED" = y_pred)
+# 
 
-## This table will contain the main values to replicate in dataset used to predict, and number of observations
-## E.g. if filtering certain week, it will pull related variables like month
-## Include in the filtering those variables that either won't be used for simulating or have a lot of related vars
-table_base_values_pred<- dataset_ml %>% 
-  filter("VARIABLE TO FILTER" == "VALUE TO FILTER") %>% 
-  head(n = 10)
 
-## See names of columns to create de predict data frame
-colnames(dataset_ml)
-
-## Assign individual values
-cluster.assigned <- 1
-donation.amount <- 25
-development.income <- 1
-group.name <- 1
-payment.type <- 1
-donor.type <- 1
-donor.category <- 1
-donor.gender <- 1
-donation.month <- 1
-donation.month <- 1
-donation.month <- 1
-donation.month <- 1
+########## Visualise Decision Tree ########## 
 
 
+# Train model using Caret
+classifier <- train(
+  binari.second.donation ~ .,
+  data = training_set,
+  method = "rpart",
+  trControl = my_control,
+  metric = "ROC",
+  tuneLength = 10,
+  parms = list(split = 'gini')
+)
 
-## Extract the values from table_base_values_pred
-"VARIABLE" <- table_base_values_pred$"VARIABLE TO EXTRACT"
-## Variables that make no differences in the prediction can be assigned directly (randomly from table_base_values_pred)
-"VARIABLE" <- table_base_values_pred$"VARIABLE TO EXTRACT"
-
-# Data frame with simulation data
-predict_dataframe<- data.frame(
-  "VARIABLE",
-  "VARIABLE",
-  "VARIABLE"
-) 
-
-# Predict the results
-
-####################### CLASSIFICATION
-
-#### BINARY OUTPUT 
-# Predict 
-## When raw, the predictions will appear in format "yes", "no"
-## When prob, the predictions will appear in format 0.8 (probability of bein "yes" or "no")
-y_pred <- predict.train(classifier, predict_dataframe, type = "raw")
-y_pred <- predict.train(classifier, predict_dataframe, type = "prob") 
-
-## In this example its assumed that type = "raw"
-dataset_post_simulation <- predict_dataframe %>% 
-  mutate("predicts.WHAT.IS.BEING.PREDICTED" = y_pred)
-
-
-#### NOT BINARY OUTPUT
-# Predict 
-y_pred<- predict(classifier, test_set[,"COLUMNS WITH ALL independentVs"])
-
-dataset_post_simulation <- predict_dataframe %>% 
-  mutate("predicts.WHAT.IS.BEING.PREDICTED" = y_pred)
-
-
-####################### REGRESSION
-
-# Predict
-y_pred<- predict(classifier, test_set[,"COLUMNS WITH ALL independentVs"])
-
-dataset_post_simulation <- predict_dataframe %>% 
-  mutate("predicts.WHAT.IS.BEING.PREDICTED" = y_pred)
-
-
+# Plot decision tree
+rpart.plot(classifier$finalModel)
+rules <- rpart.rules(classifier$finalModel, cover = TRUE) 
+# Write a .csv file to see the rules in excel and manipulate (give colors, share, etc.)
+write_csv(rules, "rules.csv")
 
