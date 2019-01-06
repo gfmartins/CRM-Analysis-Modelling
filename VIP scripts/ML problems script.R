@@ -323,7 +323,7 @@ cl <- makeCluster(no_cores, type="FORK")
 ## If running multiple models and later comparing them (resamples()), remember to differenciate names of the classifiers
 
 tgrid <- expand.grid(
-  .mtry = 134,
+  .mtry = 239,
   .splitrule = "gini",
   .min.node.size = c(1)
 )
@@ -337,7 +337,7 @@ classifier <- train(binari.second.donation ~.,
                     method = "ranger",
                     trControl = my_control,
                     num.trees = 500,
-                    # tuneGrid = tgrid,
+                    tuneGrid = tgrid,
                     importance = "permutation"
 )
 
