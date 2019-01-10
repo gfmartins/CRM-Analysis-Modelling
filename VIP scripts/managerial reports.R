@@ -3,19 +3,16 @@ library(gridExtra)
 library(plotly)
 
 
-
 # Plot of total donations $$ 
 plot1 <- dataset_donations %>%
   select(donation.amount,
          donation.year) %>% 
-  filter(donation.year > 2000) %>%
+  filter(between(donation.year, 2000, 2018)) %>%
   group_by(donation.year) %>%
   mutate(sum.donations.year = sum(donation.amount, na.rm = TRUE)) %>% 
   distinct(donation.year, .keep_all = TRUE) %>%
   ungroup() %>%
   ggplot(aes(donation.year, sum.donations.year)) +
-  geom_hline(yintercept = 928000, colour = "orange1") +
-  geom_hline(yintercept = 967000, colour = "orange3") +
   labs(title = "Sum of Total $$ Donations") +
   geom_line() +
   geom_smooth(se = FALSE, method = "lm")
@@ -24,7 +21,7 @@ plot1 <- dataset_donations %>%
 plot2 <- dataset_donations %>%
   select(donation.amount,
          donation.year) %>% 
-  filter(donation.year > 2000) %>%
+  filter(between(donation.year, 2000, 2018)) %>%
   group_by(donation.year) %>%
   mutate(sum.donations.year = sum(donation.amount, na.rm = TRUE)) %>% 
   distinct(donation.year, .keep_all = TRUE) %>%
@@ -47,7 +44,7 @@ plotly1 <- dataset_donations %>%
   select(donation.amount,
          donation.year,
          development.income) %>% 
-  filter(donation.year > 2000) %>%
+  filter(between(donation.year, 2000, 2018)) %>%
   # group_by(donation.year) %>%
   # mutate(sum.donations.year = sum(donation.amount, na.rm = TRUE)) %>% 
   # ungroup() %>% 
@@ -67,8 +64,8 @@ dataset_donations %>%
   select(donation.amount,
          donation.year,
          development.income) %>% 
+  filter(between(donation.year, 2000, 2018)) %>%
   filter(
-    donation.year > 2008,
     development.income %in% c(
       "Events",
       "Commmunity",
@@ -100,7 +97,7 @@ dataset_donations %>%
   select(donation.amount,
          donation.year,
          development.income) %>% 
-  filter(donation.year > 2000) %>%
+  filter(between(donation.year, 2000, 2018)) %>%
   group_by(donation.year) %>%
   mutate(sum.donations.year = sum(donation.amount, na.rm = TRUE)) %>% 
   ungroup() %>% 
@@ -122,7 +119,7 @@ dataset_donations %>%
   select(donation.amount,
          donation.year,
          development.income) %>% 
-  filter(donation.year > 2000) %>%
+  filter(between(donation.year, 2000, 2018)) %>%
   group_by(donation.year) %>%
   mutate(sum.donations.year = sum(donation.amount, na.rm = TRUE)) %>% 
   ungroup() %>% 
@@ -144,8 +141,8 @@ dataset_donations %>%
   select(donation.amount,
          donation.year,
          development.income) %>% 
+  filter(between(donation.year, 2000, 2018)) %>%
   filter(
-    donation.year > 2008,
     development.income %in% c(
       "Events",
       "Commmunity",
@@ -176,8 +173,8 @@ dataset_donations %>%
   select(donation.amount,
          donation.year,
          development.income) %>% 
+  filter(between(donation.year, 2000, 2018)) %>%
   filter(
-    donation.year > 2008,
     development.income %in% c(
       "Events",
       "Commmunity",
@@ -206,8 +203,8 @@ dataset_donations %>%
 
 # Plot of growth of new donors by year
 dataset_donations %>%
+  filter(between(donation.year, 2000, 2018)) %>%
   filter(
-    donation.year > 2000,
     development.income %in% c(
       "Events",
       "Commmunity",
@@ -246,7 +243,7 @@ dataset_donations %>%
 ## Correlation new donors income
 
 VectorPercTotalDon<- dataset_donations %>%
-  filter(donation.year > 2012) %>% 
+  filter(between(donation.year, 2012, 2018)) %>%
   arrange(donation.year) %>%
   group_by(donation.year) %>%
   mutate(sum.donations.year = sum(donation.amount, na.rm = TRUE)) %>%
@@ -260,7 +257,7 @@ VectorPercTotalDon<- dataset_donations %>%
 
 
 VectorPercNewDon <- dataset_donations %>%
-  filter(donation.year > 2012) %>% 
+  filter(between(donation.year, 2012, 2018)) %>%
   select(
     # donation.date,
     donation.year,
@@ -291,7 +288,7 @@ cor(VectorPercNewDon, VectorPercTotalDon, use = "pairwise.complete.obs")
 
 ## December used to be a low donation date
 p1 <- dataset_donations %>% 
-  filter(donation.year > 2008) %>% 
+  filter(between(donation.year, 2000, 2018)) %>%
   mutate(year = strftime(.$donation.date, format = "%Y")) %>%
   mutate(month = strftime(.$donation.date, format = "%m")) %>%
   unite(MY, month, year) %>% 
