@@ -1,43 +1,5 @@
 library(plotly)
-
-# # See meaning grouping by group
-# dataset_donations %>% 
-#   # filter(source == "INMCOL") %>%
-#   # filter(group.name == "In Memoriam") %>% 
-#   filter(source.group == "EVE") %>% 
-#   select(source.desc:group.name) %>% 
-#   View("description source")
-# 
-# # See levels of a group
-#  dataset_donations %>% 
-#    # filter(source == "INMCOL") %>%
-#    # filter(group.name == "In Memoriam") %>% 
-#    filter(source.group == "CLR") %>%
-#    droplevels() %$% 
-#    table(source.desc) %>% 
-#    View("2")
- 
-# See ranking acquisource by donor and source
-# dataset_ml %>% 
-#   distinct(donor.no, .keep_all = TRUE) %>% 
-#   group_by(acquisition.source) %>% 
-#   mutate(number.times = n()) %>% 
-#   ungroup() %>% 
-#   arrange(desc(number.times)) %>% 
-#   select(acquisition.source, number.times) %>% 
-#   distinct(acquisition.source, .keep_all = TRUE) %>% 
-#   View("ranking acquisition (per donor)")
-  
-# # See ranking acquisource by total and source
-# dataset_ml %>% 
-#   # distinct(donor.no, .keep_all = TRUE) %>% 
-#   group_by(acquisition.source) %>% 
-#   mutate(number.times = n()) %>% 
-#   ungroup() %>% 
-#   arrange(desc(number.times)) %>% 
-#   select(acquisition.source, number.times) %>% 
-#   distinct(acquisition.source, .keep_all = TRUE) %>% 
-#   View("ranking acquisition (per all)")
+library(gridExtra)
 
 
 # See ranking acquisource by donor and group 
@@ -58,7 +20,7 @@ dataset_ml %>%
 
 ###### Donations by sequencial donation ##########
 
-# See what is the most common reason of second donations given In Memory as the first one, per donor
+# See what is the most common reason of second, third... 10th donations given In Memory as the first one, per donor
 
 table.2 <- dataset_ml %>% 
   mutate(acquisition.group = str_sub(.$acquisition.source, 1,3)) %>% 
@@ -230,5 +192,126 @@ plot.total <- table.2 %>%
   ggplot(aes(donation.count, number.times, colour = activity.clusters)) + 
   geom_line()
 
-
 ggplotly(plot.total)
+
+
+###### Identifying donors that are likely to engage ##########
+
+# See if payment type can be a predictor 
+
+### Prepare data
+
+Mode <- function(x) {
+  ux <- unique(x)
+  if(!anyDuplicated(x)){
+    NA_character_ } else { 
+      tbl <-   tabulate(match(x, ux))
+      toString(ux[tbl==max(tbl)])
+    }
+}
+
+## What payments methods use more engaged donors?
+dataset_ml %>% 
+  droplevels() %>% 
+  group_by(donor.no) %>% 
+  mutate(max.number.donations = max(counter.donation),
+         most.used.paymentchannel = Mode(payment.type)) %>% 
+  ungroup() %>% 
+  filter(max.number.donations < 200,
+         payment.type %in% c(1,2,11, 14:16),
+         !source %in% c("CAMPOC", "REGGIV","FRIEND", "GIVAYE")
+         ) %>% 
+  distinct(donor.no, .keep_all = TRUE) %>%
+  select(donor.no, payment.type, most.used.paymentchannel, max.number.donations) %>% 
+  na.omit() %>% 
+  ggplot(aes(max.number.donations)) +
+  geom_histogram(bins = 200) +
+  facet_grid(payment.type ~ ., scales = "free_y")
+
+
+
+# Are donors that live closer to the hospice more engaged?
+## Yes, but the difference is not that relevant
+plot1 <- dataset_ml %>% 
+  droplevels() %>% 
+  group_by(donor.no) %>% 
+  mutate(max.number.donations = max(counter.donation)) %>% 
+  ungroup() %>% 
+  mutate(binari.outside.area = ifelse(closest.retail.store == "Outside of Catchment Area", "Yes", "No")) %>% 
+  filter(max.number.donations < 20,
+         # payment.type %in% 14,
+         !source %in% c("CAMPOC", "REGGIV","FRIEND", "GIVAYE")
+  ) %>% 
+  distinct(donor.no, .keep_all = TRUE) %>%
+  select(donor.no, payment.type, max.number.donations, binari.outside.area) %>% 
+  na.omit() %>% 
+  ggplot(aes(max.number.donations)) +
+  geom_histogram(bins = 20) +
+  facet_grid(binari.outside.area ~ ., scales = "free_y", labeller = label_both) +
+  labs(title = "Just Giving")
+
+plot2 <- dataset_ml %>% 
+  droplevels() %>% 
+  group_by(donor.no) %>% 
+  mutate(max.number.donations = max(counter.donation)) %>% 
+  ungroup() %>% 
+  mutate(binari.outside.area = ifelse(closest.retail.store == "Outside of Catchment Area", "Yes", "No")) %>% 
+  filter(max.number.donations < 20,
+         # payment.type %in% 15,
+         !source %in% c("CAMPOC", "REGGIV","FRIEND", "GIVAYE")
+  ) %>% 
+  distinct(donor.no, .keep_all = TRUE) %>%
+  select(donor.no, payment.type, max.number.donations, binari.outside.area) %>% 
+  na.omit() %>% 
+  ggplot(aes(max.number.donations)) +
+  geom_histogram(bins = 20) +
+  facet_grid(binari.outside.area ~ ., scales = "free_y", labeller = label_both) +
+  labs(title = "PayPal")
+
+grid.arrange(plot1, plot2, nrow=2, ncol=1)
+
+
+# Is there any difference between Just Giving and PayPal users?
+## Yes, a relevant
+
+plot1 <- dataset_ml %>% 
+  droplevels() %>% 
+  group_by(donor.no) %>% 
+  mutate(max.number.donations = max(counter.donation)) %>% 
+  ungroup() %>% 
+  mutate(binari.outside.area = ifelse(closest.retail.store == "Outside of Catchment Area", "Yes", "No")) %>% 
+  filter(max.number.donations < 100,
+         payment.type %in% 14,
+         !source %in% c("CAMPOC", "REGGIV","FRIEND", "GIVAYE")
+  ) %>% 
+  distinct(donor.no, .keep_all = TRUE) %>%
+  select(donor.no, payment.type, max.number.donations, binari.outside.area) %>% 
+  na.omit() %>% 
+  ggplot(aes(max.number.donations)) +
+  geom_histogram(bins = 100) +
+  facet_grid(binari.outside.area ~ ., scales = "free_y", labeller = label_both) +
+  labs(title = "Just Giving")
+
+plot2 <- dataset_ml %>% 
+  droplevels() %>% 
+  group_by(donor.no) %>% 
+  mutate(max.number.donations = max(counter.donation)) %>% 
+  ungroup() %>% 
+  mutate(binari.outside.area = ifelse(closest.retail.store == "Outside of Catchment Area", "Yes", "No")) %>% 
+  filter(max.number.donations < 100,
+         payment.type %in% 15,
+         !source %in% c("CAMPOC", "REGGIV","FRIEND", "GIVAYE")
+  ) %>% 
+  distinct(donor.no, .keep_all = TRUE) %>%
+  select(donor.no, payment.type, max.number.donations, binari.outside.area) %>% 
+  na.omit() %>% 
+  ggplot(aes(max.number.donations)) +
+  geom_histogram(bins = 100) +
+  facet_grid(binari.outside.area ~ ., scales = "free_y", labeller = label_both) +
+  labs(title = "PayPal")
+
+grid.arrange(plot1, plot2, nrow=2, ncol=1)
+
+
+
+
