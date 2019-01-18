@@ -211,6 +211,7 @@ Mode <- function(x) {
 }
 
 ## What payments methods use more engaged donors?
+## Looks like Cash and Checks and Just Giving
 dataset_ml %>% 
   droplevels() %>% 
   group_by(donor.no) %>% 
@@ -312,6 +313,14 @@ plot2 <- dataset_ml %>%
 
 grid.arrange(plot1, plot2, nrow=2, ncol=1)
 
+
+# Regular givers through Just Giving
+dataset_donations %>% 
+  filter(source %in% c("CAMPOC", "REGGIV","FRIEND", "GIVAYE"),
+         payment.type == 14) %>% 
+  # distinct(donor.no) %>% 
+  View() 
+  
 
 
 

@@ -106,8 +106,8 @@ dataset_ml <- dataset_donations %>%
     number.of.donations,
     # income.stream,
     donation.month,
-    donation.year
-    # acquisition.source
+    donation.year,
+    acquisition.source
   ) %>%
   # Perform feature creation
   mutate(days.from.first.donation = difftime(Sys.time(), date.of.first.donation, units = "days")) %>% 
@@ -227,6 +227,9 @@ dataset_ml <- dataset_donations %>%
 ## how many donors go on to make a second donation? 
 ##  (probability of a donor with ‘acquisition source’ is INMEMO or INMCOL, to make a second donation. 
 ##   If they do make a second donation what activity do they do (which cluster?) 
+
+
+## This dataset is useful for predicting a donor making a second donation
 dataset_ml_3 <- dataset_ml %>% 
   droplevels() %>% 
   select(-c(donation.date,
@@ -265,40 +268,85 @@ dataset_ml_3 <- dataset_ml %>%
   mutate(binari.regular.giver = ifelse(source %in% c("CAMPOC", "REGGIV","FRIEND", "GIVAYE"), "Yes", "No")) %>%
   # filter(counter.donation == 1) %>% 
   mutate(binari.second.donation = case_when(max.number.donations == 2 ~ "Yes",
-                                            max.number.donations == 1 ~ "No")) %>% 
+                                            max.number.donations == 1 ~ "No")
+         ) %>% 
   mutate_at(vars(binari.second.donation), funs(as.factor)) %>% 
   distinct(donor.no, .keep_all = TRUE) %>% 
   na.omit() %>% 
-  # filter(binari.regular.giver == "No",
-  #        !payment.type %in% "19") %>% 
-  # mutate_if(is.character, as.factor) %>% 
   select(-c(donor.no, max.number.donations, counter.donation, source, group.name))
   
 
 
+## This dataset is useful for predicting a donor making more than two donations
+dataset_ml_2 <- dataset_ml %>% 
+  droplevels() %>% 
+  select(-c(donation.date,
+            # donation.amount,
+            donation.month,
+            value.previous.donation,
+            application,
+            # source, # will be deleted later
+            # payment.type,
+            class.prev.payment.type,
+            date.of.first.donation,
+            number.of.donations,
+            # income.stream,
+            donation.year,
+            number.donation.year,
+            value.donations.year,
+            mean.number.donations.year,
+            mean.value.donations.year,
+            diff,
+            diff.days,
+            mean.diff.days,
+            # binari.high.value.actual.donation,
+            days.between.donations, 
+            days.from.first.donation,
+            class.prev.development.income,
+            class.prev.group.name
+            # payment.type
+            # group.name
+            # closest.retail.store) # Include this variable when the grouping in clusters is done
+  )
+  ) %>% 
+  group_by(donor.no) %>% 
+  mutate(max.number.donations = max(counter.donation)) %>% 
+  ungroup() %>% 
+  mutate(binari.regular.giver = ifelse(source %in% c("CAMPOC", "REGGIV","FRIEND", "GIVAYE"), "Yes", "No")) %>%
+  mutate(binari.more.two.donations = case_when(max.number.donations > 2 ~ "Yes",
+                                               max.number.donations <= 2 ~ "No")
+  ) %>% 
+  mutate_at(vars(binari.more.two.donations), funs(as.factor)) %>% 
+  distinct(donor.no, .keep_all = TRUE) %>% 
+  na.omit() %>% 
+  select(-c(donor.no, max.number.donations, counter.donation, source, group.name))
+
+
+
 ########## Train the Random Forest model ########## 
 
-### Hipothesis: Given a first donation and its characteristics, what's going to be the next donation activity?
-# To do: Group events to maximum three categories (too many at me moment makes it difficult to group.name)
+### Prepare training sets
+# Change dataset_ml_n according to question
+
 
 # Randomize dataset
 set.seed(234)
-random<- sample(nrow(dataset_ml_3), 5000)
-# random<- sample(nrow(dataset_ml_3))
-dataset_ml_3<- dataset_ml_3[random, ]
+random<- sample(nrow(dataset_ml_2), 5000)
+# random<- sample(nrow(dataset_ml_2))
+dataset_ml_2<- dataset_ml_2[random, ]
 
 # Separar el training del test set
 set.seed(123)
 ## El sample.split se lo efectua con la variable dependiente
-split<- sample.split(dataset_ml_3$binari.second.donation, SplitRatio = 0.8)
+split<- sample.split(dataset_ml_2$binari.more.two.donations, SplitRatio = 0.8)
 
 # Crear los sets de training y test
-training_set<- subset(dataset_ml_3, split == TRUE)
-test_set<- subset(dataset_ml_3, split == FALSE)
+training_set<- subset(dataset_ml_2, split == TRUE)
+test_set<- subset(dataset_ml_2, split == FALSE)
 
 # Create custom indices: myFolds
 ## This is for being able to run different models with the same folds and bein able to compare them (apples with apples)
-myFolds <- createFolds(training_set$binari.second.donation, k = 5)
+myFolds <- createFolds(training_set$binari.more.two.donations, k = 5)
 
 
 # If we want to have the ROC index of a binary classification algoritm instead of Accuracy
@@ -323,17 +371,37 @@ cl <- makeCluster(no_cores, type="FORK")
 # Random Forest
 ## If running multiple models and later comparing them (resamples()), remember to differenciate names of the classifiers
 
- tgrid <- expand.grid(
-   .mtry = 38,
-   .splitrule = "gini",
-   .min.node.size = c(1)
- )
+## For dataset_ml3
+tgrid <- expand.grid(
+  .mtry = 112,
+  .splitrule = "gini",
+  .min.node.size = c(1)
+)
+
+## For dataset_ml2
+ # tgrid <- expand.grid(
+ #   .mtry = 112,
+ #   .splitrule = "gini",
+ #   .min.node.size = c(1)
+ # )
 
 
-# Make the classifier
-### BINARY OUTPUT
+### Make the classifier
+ 
+## BINARY OUTPUT
+## Question: Is a donor making a second donation?
+ # classifier <- train(binari.second.donation ~.,
+ #                     data = training_set,
+ #                     metric ="ROC", #THIS HAS TO BE SPECIFIED IF THE MODEL IS NOT "glm"
+ #                     method = "ranger",
+ #                     trControl = my_control,
+ #                     num.trees = 500,
+ #                     # tuneGrid = tgrid,
+ #                     importance = "permutation"
+ # )
 
- classifier <- train(binari.second.donation ~., 
+ ## Question: Is a donor making more than two donations?
+ classifier <- train(binari.more.two.donations ~.,
                      data = training_set,
                      metric ="ROC", #THIS HAS TO BE SPECIFIED IF THE MODEL IS NOT "glm"
                      method = "ranger",
@@ -342,8 +410,8 @@ cl <- makeCluster(no_cores, type="FORK")
                      tuneGrid = tgrid,
                      importance = "permutation"
  )
-
-
+ 
+ 
 # Stop parallel computing
 stopCluster(cl)
 
@@ -367,7 +435,7 @@ classifier$resample
 # Make a confusion matrix
 ## Type must be "raw"
 y_pred <- predict.train(classifier, test_set, type = "raw")
-confusionMatrix(y_pred, test_set$binari.second.donation)
+confusionMatrix(y_pred, test_set$binari.more.two.donations)
 
 
 # ############# Model Prediction/Simulation of Random Forest Model ############# 
@@ -446,21 +514,40 @@ confusionMatrix(y_pred, test_set$binari.second.donation)
 
 ########## Visualise Decision Tree ########## 
 
-
+# Question: What makes a donor make a second donation?
 # Train model using Caret
+# classifier <- train(
+#   binari.second.donation ~ .,
+#   data = training_set,
+#   method = "rpart",
+#   trControl = my_control,
+#   metric = "ROC",
+#   tuneLength = 10,
+#   parms = list(split = 'gini')
+# )
+
+# Question: What makes a donor make more than two donations?
 classifier <- train(
-  binari.second.donation ~ .,
+  binari.more.two.donations ~ .,
   data = training_set,
   method = "rpart",
   trControl = my_control,
   metric = "ROC",
   tuneLength = 10,
+  # tuneGrid = tgrid,
   parms = list(split = 'gini')
 )
+
+
+# Make a confusion matrix
+## Check if it's worth take the rules from the model applying rpart instead of ranger
+y_pred <- predict.train(classifier, test_set, type = "raw")
+confusionMatrix(y_pred, test_set$binari.more.two.donations)
 
 # Plot decision tree
 rpart.plot(classifier$finalModel)
 rules <- rpart.rules(classifier$finalModel, cover = TRUE) 
+View(rules)
 # Write a .csv file to see the rules in excel and manipulate (give colors, share, etc.)
 write_csv(rules, "rules.csv")
 
