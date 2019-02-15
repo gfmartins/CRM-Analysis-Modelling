@@ -12,6 +12,9 @@ library(corrplot)
 library(caTools)
 library(rpart.plot)
 library(readr)
+
+
+
 ########################  Cluster data (Unsupervised Learning) ########################  
 
 ### Prepare data
@@ -78,7 +81,7 @@ dataset_donations <- dataset_donations %>%
   mutate_at(vars(cluster.assigned), funs(as.factor))
 
 
-############################################### Predict (Supervised Learning) ################################################## 
+############################################### Data Preparation for Supervised Learning ################################################## 
 
 
 ### Prepare data
@@ -438,8 +441,8 @@ y_pred <- predict.train(classifier, test_set, type = "raw")
 confusionMatrix(y_pred, test_set$binari.more.two.donations)
 
 
-# ############# Model Prediction/Simulation of Random Forest Model ############# 
-# 
+############## Model Prediction/Simulation of Random Forest Model ############# 
+
 # ## This table will contain the main values to replicate in dataset used to predict, and number of observations
 # ## E.g. if filtering certain week, it will pull related variables like month
 # ## Include in the filtering those variables that either won't be used for simulating or have a lot of related vars
