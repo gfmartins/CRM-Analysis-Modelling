@@ -314,13 +314,145 @@ plot2 <- dataset_ml %>%
 grid.arrange(plot1, plot2, nrow=2, ncol=1)
 
 
-# Regular givers through Just Giving
+# Types of activities paid with Just Giving
+## Do donations made by Just Giving reveal a certain activity that causes engagement? 
+
 dataset_donations %>% 
-  filter(source %in% c("CAMPOC", "REGGIV","FRIEND", "GIVAYE"),
+  # distinct(donor.no, .keep_all = TRUE) %>% 
+  filter(donation.year > 2008,
          payment.type == 14) %>% 
-  # distinct(donor.no) %>% 
-  View() 
-  
+  # mutate(acquisition.group = str_sub(.$acquisition.source, 1,3)) %>% 
+  group_by(group.name) %>% 
+  mutate(number.times = n()) %>%
+  ungroup() %>% 
+  arrange(desc(number.times)) %>% 
+  select(group.name, number.times) %>% 
+  distinct(group.name, .keep_all = TRUE) %>% 
+  head(n = 10) %>% 
+  ggplot(aes(group.name, number.times)) +
+  geom_col() +
+  theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5, size=6))
+
+
+# Development income total by year
+plotly1 <- dataset_donations %>%
+  select(donation.amount,
+         donation.year,
+         development.income) %>% 
+  filter(between(donation.year, 2000, 2018)) %>%
+  # group_by(donation.year) %>%
+  # mutate(sum.donations.year = sum(donation.amount, na.rm = TRUE)) %>% 
+  # ungroup() %>% 
+  group_by(donation.year, development.income) %>% 
+  mutate(sum.donations.year.dev.income = sum(donation.amount, na.rm = TRUE)) %>% 
+  distinct(donation.year, .keep_all = TRUE) %>%
+  # mutate(perc.dev.incomme.total.don = round((sum.donations.year.dev.income / sum.donations.year) * 100, 2)) %>% 
+  filter(development.income != "NEHL") %>% 
+  ggplot(aes(donation.year, sum.donations.year.dev.income, colour = development.income)) +
+  geom_line()
+
+ggplotly(plotly1)
+
+
+# Plot of growth of number donations by developement income
+dataset_donations %>%
+  select(donation.amount,
+         donation.year,
+         development.income) %>% 
+  filter(between(donation.year, 2000, 2018)) %>%
+  filter(
+    development.income %in% c(
+      "Events",
+      "Commmunity",
+      "Individuals/ Donor development",
+      "Legacies",
+      "Restricted Trust Income",
+      "Unrestricted Trust Income"
+    )
+  ) %>%
+  group_by(donation.year, development.income) %>%
+  mutate(number.donations.year = n()) %>%
+  distinct(donation.year, .keep_all = TRUE) %>%
+  ungroup() %>%
+  arrange(development.income, donation.year) %>% 
+  mutate(perc.prev.year = round((
+    number.donations.year / lag(number.donations.year)
+  ) * 100, 2)) %>%
+  ggplot(aes(donation.year, perc.prev.year), colour = development.income) +
+  labs(title = "Growth of Number of Donations") +
+  geom_line() +
+  geom_hline(yintercept = 100, colour = "orange1") +
+  geom_smooth(se = FALSE, method = "loess") +
+  facet_grid(development.income ~ ., scales = "free_y")
+
+
+# Plot of growth of new donors by year
+dataset_donations %>%
+  filter(between(donation.year, 2000, 2018)) %>%
+  filter(
+    development.income %in% c(
+      "Events",
+      "Commmunity",
+      "Individuals/ Donor development",
+      "Legacies",
+      "Restricted Trust Income",
+      "Unrestricted Trust Income"
+    )
+  ) %>%
+  group_by(donor.no, development.income) %>% 
+  mutate(donations.per.donor = n()) %>%
+  # gather(index, value, -c(journal.no:donation.year, MY)) %>%
+  ungroup() %>% 
+  filter(donations.per.donor == 1) %>%
+  group_by(donation.year, development.income) %>%
+  mutate(sum.new.donors = n()) %>%
+  distinct(donation.year, .keep_all = TRUE) %>% 
+  ungroup() %>%
+  arrange(development.income, donation.year) %>%
+  mutate(perc.prev.year = round((
+    sum.new.donors / lag(sum.new.donors)
+  ) * 100, 2)) %>%  
+  # mutate_if(is.character, as.factor) %>% 
+  ggplot(aes(
+    donation.year,
+    perc.prev.year
+  )) + 
+  labs(title = "Growth of New Donors") +
+  geom_line() +
+  geom_hline(yintercept = 100, colour = "orange1") +
+  geom_smooth(se = FALSE, method = "loess") +
+  facet_grid(development.income ~ ., scales = "free_y")
 
 
 
+# Plot of growth of average donations by developement income
+dataset_donations %>%
+  select(donation.amount,
+         donation.year,
+         development.income) %>% 
+  filter(between(donation.year, 2000, 2018)) %>%
+  filter(
+    development.income %in% c(
+      "Events",
+      "Commmunity",
+      "Individuals/ Donor development",
+      "Legacies",
+      "Restricted Trust Income",
+      "Unrestricted Trust Income"
+    )
+  ) %>%
+  group_by(donation.year, development.income) %>%
+  mutate(avg.donations.year = mean(donation.amount, na.rm = TRUE)) %>% 
+  distinct(donation.year, .keep_all = TRUE) %>% 
+  ungroup() %>%
+  arrange(development.income, donation.year) %>%
+  mutate(perc.prev.year = round((
+    avg.donations.year / lag(avg.donations.year)
+  ) * 100, 2)) %>% 
+  filter(perc.prev.year < 3000) %>% 
+  ggplot(aes(donation.year, perc.prev.year), colour = development.income) +
+  labs(title = "Growth of Mean Donations") +
+  geom_line() +
+  geom_hline(yintercept = 100, colour = "orange1") +
+  geom_smooth(se = FALSE, method = "loess") +
+  facet_grid(development.income ~ ., scales = "free_y")
