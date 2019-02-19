@@ -97,6 +97,22 @@ dataset_clustering <- dataset_pre_clustering %>%
                  recency), funs(as.numeric))
 
 
+# Main statistics of LRFMP variables
+dataset_pre_clustering %>% 
+  select(length,
+         recency,
+         frequency,
+         monetary,
+         peridiocity) %>% 
+  mutate_at(vars(length, 
+                 recency), funs(as.numeric)) %>% 
+  summarise_all(funs(max, 
+                     min,
+                     mean,
+                     sd)) %>% 
+  View()
+
+
 # Scale the data if neccesary (by preProcess = )
 # library(caret)
 ## Create an object with the pre processing parameters
@@ -216,14 +232,21 @@ clusplot(dataset_clustering,
 # Explore the clusters without main dataset data
 ## Calculate summary statistics for each category (e.g. mean())
 ## data_set_clustered_ depends on what type of cluster is being analized (in this case KM) 
+
 dataset_clustered_km %>% 
+  select(
+    cluster.assigned,
+    length,
+    recency,
+    frequency,
+    monetary,
+    peridiocity
+    ) %>% 
   group_by(cluster.assigned) %>% 
   mutate(count.per.cluster = n()) %>% 
-  summarise_all(funs(mean(.))) %>% 
-  select(cluster.assigned, 
-         count.per.cluster) %>% 
-  View()
-
+  summarise_all(funs(round(mean(., na.rm = TRUE))),2) %>% 
+  View("bien")
+  
 
 ###### Third part: DBSCAN Clustering ###### 
 
