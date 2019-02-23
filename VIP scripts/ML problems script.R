@@ -316,13 +316,18 @@ dataset_ml_2 <- dataset_ml %>%
   mutate(max.number.donations = max(counter.donation)) %>% 
   ungroup() %>% 
   mutate(binari.regular.giver = ifelse(source %in% c("CAMPOC", "REGGIV","FRIEND", "GIVAYE"), "Yes", "No")) %>%
+  filter(!binari.regular.giver == "Yes") %>% #new 
   mutate(binari.more.two.donations = case_when(max.number.donations > 2 ~ "Yes",
                                                max.number.donations <= 2 ~ "No")
   ) %>% 
   mutate_at(vars(binari.more.two.donations), funs(as.factor)) %>% 
-  distinct(donor.no, .keep_all = TRUE) %>% 
+  # distinct(donor.no, .keep_all = TRUE) %>% #new
   na.omit() %>% 
-  select(-c(donor.no, max.number.donations, counter.donation, source, group.name))
+  select(-c(donor.no, 
+            max.number.donations, 
+            counter.donation, 
+            source, group.name,
+            binari.regular.giver))
 
 
 

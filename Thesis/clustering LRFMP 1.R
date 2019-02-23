@@ -12,7 +12,11 @@ library(corrplot)
 library(caTools)
 library(rpart.plot)
 library(readr)
+library(purrr)
+library(cluster)
 
+
+### THIS SCRIPT INCLUDES THE CLUSTERING PROCESS FROM ANALYSIS OF NUMBER OF CLUSTERS TO THE CLUSTERING ITSELF
 
 #####  Prepare the Data ####
 
@@ -132,7 +136,6 @@ dataset_clustering <- predict(ObjectPreprocessParams, dataset_clustering)
 # Use the elbow method to find the optimal number of clusters
 ## If we know beforehand that there are for example two subgroups, we omit this step
 ## Use map_dbl to run many models with varying value of k (centers)
-library(purrr)
 tot_withinss <- map_dbl(1:10,  function(k){
   model <- kmeans(x = dataset_clustering, centers = k)
   model$tot.withinss
@@ -157,10 +160,8 @@ NumberClusters<- 5
 ### Use Silhouette Analysis for determining the correct number of clusters
 
 ## Generate a k-means model using the pam() function with a k value that we want to asses its correctness
-library(cluster)
 # Utilize parallel computing for improving speed of processing
 ## Calculate the number of cores
-library(parallel)
 no_cores <- detectCores() - 1
 ## Initiate cluster
 cl <- makeCluster(no_cores, type="FORK")
@@ -211,7 +212,7 @@ ObjectKM<- kmeans(dataset_clustering,
 VectorClusters<- ObjectKM$cluster
 ## Create a new column with the clients and the cluster in which it was assigned
 ## If dataset_pre_clustering was created, use it here
-dataset_clustered_km <- mutate(dataset_pre_clustering, cluster.assigned = VectorClusters)
+dataset_clustered_km <- mutate(dataset_pre_clustering, cluster.assigned = VectorClusters) 
 
 # Visualize the clusters
 ## Option1
@@ -232,7 +233,6 @@ clusplot(dataset_clustering,
 # Explore the clusters without main dataset data
 ## Calculate summary statistics for each category (e.g. mean())
 ## data_set_clustered_ depends on what type of cluster is being analized (in this case KM) 
-
 dataset_clustered_km %>% 
   select(
     cluster.assigned,
@@ -246,6 +246,14 @@ dataset_clustered_km %>%
   mutate(count.per.cluster = n()) %>% 
   summarise_all(funs(round(mean(., na.rm = TRUE))),2) %>% 
   View("bien")
+
+
+## Include clusters to main dataset with all the data
+dataset_donations <- dataset_donations %>% 
+  left_join(dataset_clustered_km, by = "donor.no") %>% 
+  # In case some clients were excluded from the clustering, they are assigned as Outliers
+  replace_na(list(cluster.assigned = "Outlier")) %>% 
+  select(-c(length.pre, diff, diff.days))
   
 
 ###### Third part: DBSCAN Clustering ###### 
@@ -292,259 +300,4 @@ plot(ObjectDBSCAN, dataset_clustering, main = "DBSCAN", frame = FALSE)
 library("factoextra")
 ## stand = FALSE if already standarized the dataset, geom = type of graph
 fviz_cluster(ObjectDBSCAN, dataset_clustering, stand = FALSE, frame = FALSE, geom = "point")
-
-
-
-
-
-
-
-
-############################################### Data Preparation for Supervised Learning ################################################## 
-
-
-### Prepare data
-
-## ADD THREE DIGITS OF POSTCODE
-
-## Create main ML dataset
-dataset_ml <- dataset_donations %>%
-  arrange(donation.date) %>%
-  select(
-    donor.no,
-    cluster.assigned,
-    donation.date,
-    donation.amount,
-    development.income,
-    group.name,
-    application,
-    payment.type,
-    donor.type,
-    source,
-    donor.category,
-    closest.retail.store,
-    donor.gender,
-    date.of.first.donation,
-    number.of.donations,
-    # income.stream,
-    donation.month,
-    donation.year,
-    acquisition.source
-  ) %>%
-  # Perform feature creation
-  mutate(days.from.first.donation = difftime(Sys.time(), date.of.first.donation, units = "days")) %>% 
-  mutate_at(vars(days.from.first.donation), funs(as.numeric)) %>% 
-  ## yearly and value and number of donations
-  group_by(donation.year, donor.no) %>%
-  mutate(
-    number.donation.year = n(),
-    value.donations.year = mean(donation.amount)
-  ) %>%
-  ungroup() %>%
-  ## lifetime number, value donations, average days between donations
-  group_by(donor.no) %>%
-  mutate(
-    mean.number.donations.year = mean(number.donation.year, na.rm = TRUE),
-    mean.value.donations.year = mean(value.donations.year, na.rm = TRUE),
-    diff = donation.date - lag(donation.date),
-    diff.days = as.numeric(diff, units = 'days'),
-    mean.diff.days = mean(diff.days, na.rm = TRUE),
-    ## Average number of days between donations
-    days.between.donations = mean.diff.days / mean.number.donations.year, #
-    counter.donation = sequence(n()),
-    value.previous.donation = case_when(lag(donation.amount) >= 30 ~ "High Value Donation",
-                                        lag(donation.amount) <= 30 ~ "Low Value Donation"),
-    ## Threshold of what is a high or low donation
-    binari.high.value.actual.donation = case_when(donation.amount >= 30 ~ "yes",
-                                                  donation.amount <= 30 ~ "no"),
-    class.prev.development.income = lag(development.income),
-    class.prev.group.name = lag(group.name),
-    class.prev.payment.type = lag(payment.type)
-  ) %>%
-  mutate_at(vars(class.prev.development.income:class.prev.payment.type), funs(as.character)) %>% 
-  ungroup() %>%
-  mutate(activity.clusters = case_when(source %in% c("STRTIC",
-                                                     "STRREG",
-                                                     "STRSPO",
-                                                     "DOGREG",
-                                                     "DOGSPO",
-                                                     "LLUTIC",
-                                                     "GNTTIC",
-                                                     "CLRREG",
-                                                     "CLRSPO",
-                                                     "GOLDON",
-                                                     "GOLREG",
-                                                     "MIDREG",
-                                                     "MIDSPO",
-                                                     "FIRTIC",
-                                                     "CINTIC",
-                                                     "SILTIC") ~ "Cluster Events",
-                                       source %in% c("SEVONE",
-                                                     "SEVCOF",
-                                                     "SEVCEL", 
-                                                     "SEVGNR",
-                                                     "INDFUN",
-                                                     "GNRREG",
-                                                     "CELDON",
-                                                     "CELBDG",
-                                                     "SGPCCT",
-                                                     "SGPWCT",
-                                                     "SKYREG",
-                                                     "SKYSPO") ~ "Cluster Supporter Led Giving",
-                                       source %in% c("COYOTH",
-                                                     "COYDON",
-                                                     "COYSPO",
-                                                     "COYCOL",
-                                                     "COYGLO",
-                                                     "88CMEM",
-                                                     "COLBOX",
-                                                     "STRCOR",
-                                                     "DOGCOR",
-                                                     "LLUCOR",
-                                                     "GNTCOR",
-                                                     "CLRCOR",
-                                                     "GOLCOR",
-                                                     "MIDCOR",
-                                                     "FIRCOR",
-                                                     "CINCOR",
-                                                     "SILCOR") ~ "Cluster Corporate Giving",
-                                       source %in% c("REGGIV",
-                                                     "FRIEND",
-                                                     "CAMPOC",
-                                                     "GIVAYE") ~ " Cluster Regular Giving",
-                                       source %in% c("INMEMO", 
-                                                     "INMCOL") ~ "Cluster In Memory Donations/Collections",
-                                       source %in% c("INMTRE", 
-                                                     "SUNDON", 
-                                                     "LIGDON") ~ "Cluster In Memory Campaign/Product",
-                                       source %in% c("PFDDON",
-                                                     "GENDON",
-                                                     "RAFTIC",
-                                                     "RAFDON",
-                                                     "DONINS",
-                                                     "30ADON") ~ "Cluster Individual Giving",
-                                       source %in% c("LEGDON") ~ "Cluster Legacy Donors",
-                                       source %in% c("TRUSTS",
-                                                     "TRUSUN") ~ "Cluster Trusts")
-  ) %>% 
-  # droplevels() %>% 
-  replace_na(list(days.between.donations = 0, 
-                  diff.days = 0,
-                  value.previous.donation = "No Previous Donation", 
-                  class.prev.development.income = "No Previous Donation",
-                  class.prev.group.name = "No Previous Donation",
-                  activity.clusters = "Not Clustered",
-                  class.prev.payment.type = "No Previous Donation")) %>%
-  mutate(binari.cluster = if_else(cluster.assigned == "2", "Low Value Cust", "High Value Cust")) %>% 
-  mutate_at(vars(binari.cluster), funs(as.factor)) %>% 
-  mutate_if(is.character, as.factor) 
-# %>% 
-# mutate_at(vars(diff), funs(as.numeric(., units = 'days'))) %>% 
-# filter(mean.value.donations.year < 20000, mean.number.donations.year < 30) 
-
-
-
-## Create dataset for the business problem:
-## If a donors ‘acquisition source’ is INMEMO or INMCOL  
-## how many donors go on to make a second donation? 
-##  (probability of a donor with ‘acquisition source’ is INMEMO or INMCOL, to make a second donation. 
-##   If they do make a second donation what activity do they do (which cluster?) 
-
-
-## This dataset is useful for predicting a donor making a second donation
-dataset_ml_3 <- dataset_ml %>% 
-  droplevels() %>% 
-  select(-c(donation.date,
-            # donation.amount,
-            donation.month,
-            value.previous.donation,
-            application,
-            # source, # will be deleted later
-            # payment.type,
-            class.prev.payment.type,
-            date.of.first.donation,
-            number.of.donations,
-            # income.stream,
-            donation.year,
-            number.donation.year,
-            value.donations.year,
-            mean.number.donations.year,
-            mean.value.donations.year,
-            diff,
-            diff.days,
-            mean.diff.days,
-            # binari.high.value.actual.donation,
-            days.between.donations, 
-            days.from.first.donation,
-            class.prev.development.income,
-            class.prev.group.name
-            # payment.type
-            # group.name
-            # closest.retail.store) # Include this variable when the grouping in clusters is done
-  )
-  ) %>% 
-  filter(counter.donation %in% c(1,2)) %>% 
-  group_by(donor.no) %>% 
-  mutate(max.number.donations = max(counter.donation)) %>% 
-  ungroup() %>% 
-  mutate(binari.regular.giver = ifelse(source %in% c("CAMPOC", "REGGIV","FRIEND", "GIVAYE"), "Yes", "No")) %>%
-  # filter(counter.donation == 1) %>% 
-  mutate(binari.second.donation = case_when(max.number.donations == 2 ~ "Yes",
-                                            max.number.donations == 1 ~ "No")
-  ) %>% 
-  mutate_at(vars(binari.second.donation), funs(as.factor)) %>% 
-  distinct(donor.no, .keep_all = TRUE) %>% 
-  na.omit() %>% 
-  select(-c(donor.no, max.number.donations, counter.donation, source, group.name))
-
-
-
-## This dataset is useful for predicting a donor making more than two donations
-dataset_ml_2 <- dataset_ml %>% 
-  droplevels() %>% 
-  select(-c(donation.date,
-            # donation.amount,
-            donation.month,
-            value.previous.donation,
-            application,
-            # source, # will be deleted later
-            # payment.type,
-            class.prev.payment.type,
-            date.of.first.donation,
-            number.of.donations,
-            # income.stream,
-            donation.year,
-            number.donation.year,
-            value.donations.year,
-            mean.number.donations.year,
-            mean.value.donations.year,
-            diff,
-            diff.days,
-            mean.diff.days,
-            # binari.high.value.actual.donation,
-            days.between.donations, 
-            days.from.first.donation,
-            class.prev.development.income,
-            class.prev.group.name
-            # payment.type
-            # group.name
-            # closest.retail.store) # Include this variable when the grouping in clusters is done
-  )
-  ) %>% 
-  group_by(donor.no) %>% 
-  mutate(max.number.donations = max(counter.donation)) %>% 
-  ungroup() %>% 
-  mutate(binari.regular.giver = ifelse(source %in% c("CAMPOC", "REGGIV","FRIEND", "GIVAYE"), "Yes", "No")) %>%
-  filter(!binari.regular.giver == "Yes") %>% #new 
-  mutate(binari.more.two.donations = case_when(max.number.donations > 2 ~ "Yes",
-                                               max.number.donations <= 2 ~ "No")
-  ) %>% 
-  mutate_at(vars(binari.more.two.donations), funs(as.factor)) %>% 
-  # distinct(donor.no, .keep_all = TRUE) %>% #new
-  na.omit() %>% 
-  select(-c(donor.no, 
-            max.number.donations, 
-            counter.donation, 
-            source, group.name,
-            binari.regular.giver))
 
