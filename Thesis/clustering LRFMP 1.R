@@ -18,23 +18,23 @@ library(cluster)
 
 ### THIS SCRIPT INCLUDES THE CLUSTERING PROCESS FROM ANALYSIS OF NUMBER OF CLUSTERS TO THE CLUSTERING ITSELF
 
-#####  Prepare the Data ####
+####  Prepare the Data 
 
 # 1) Create dataset
-
 dataset_pre_clustering <-
   dataset_donations %>%
-  group_by(donation.year, donor.no) %>%
-  mutate(
-    number.donation.year = n(),
-    value.donations.year = mean(donation.amount, na.rm = TRUE),
-    mean.number.donations = mean(number.donation.year, na.rm = TRUE),
-    mean.value.donations = mean(value.donations.year, na.rm = TRUE)
-  ) %>%
-  ungroup() %>%
-  filter(mean.value.donations < 20000,
-         mean.number.donations < 30,
-         donation.year > 2009) %>%
+  # group_by(donation.year, donor.no) %>%
+  # mutate(
+  #   number.donation.year = n(),
+  #   value.donations.year = mean(donation.amount, na.rm = TRUE),
+  #   mean.number.donations = mean(number.donation.year, na.rm = TRUE),
+  #   mean.value.donations = mean(value.donations.year, na.rm = TRUE)
+  # ) %>%
+  # ungroup() %>%
+  filter(
+    ## This donors seems to be outliers
+    !donor.no %in% c("2640"), 
+    donation.year > 2009) %>%
   select(donation.date,
          donation.year,
          donor.no,
@@ -89,7 +89,7 @@ dataset_pre_clustering <-
   filter(frequency > 2) %>% 
   ## Leave one row per donor
   distinct(donor.no, .keep_all = TRUE) 
-  
+
 
 dataset_clustering <- dataset_pre_clustering %>%
   select(length,
@@ -99,22 +99,6 @@ dataset_clustering <- dataset_pre_clustering %>%
          peridiocity) %>% 
   mutate_at(vars(length, 
                  recency), funs(as.numeric))
-
-
-# Main statistics of LRFMP variables
-dataset_pre_clustering %>% 
-  select(length,
-         recency,
-         frequency,
-         monetary,
-         peridiocity) %>% 
-  mutate_at(vars(length, 
-                 recency), funs(as.numeric)) %>% 
-  summarise_all(funs(max, 
-                     min,
-                     mean,
-                     sd)) %>% 
-  View()
 
 
 # Scale the data if neccesary (by preProcess = )
@@ -127,7 +111,6 @@ ObjectPreprocessParams <- preProcess(dataset_clustering, method=c("scale"))
 dataset_clustering <- predict(ObjectPreprocessParams, dataset_clustering)
 # Summarize the transformed dataset
 # summary(dataset_clustering)
-
 
 #####  K-means ####
 
@@ -250,6 +233,8 @@ dataset_clustered_km %>%
 
 ## Include clusters to main dataset with all the data
 dataset_donations <- dataset_donations %>% 
+  filter(!donor.no %in% c("2640"), 
+         donation.year > 2009) %>% 
   left_join(dataset_clustered_km, by = "donor.no") %>% 
   # In case some clients were excluded from the clustering, they are assigned as Outliers
   replace_na(list(cluster.assigned = "Outlier")) %>% 
