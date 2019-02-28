@@ -323,10 +323,10 @@ dataset_ml_2 <- dataset_ml %>%
     ) %>%
   ungroup() %>% 
   # filter(!binari.regular.giver == "Yes") %>% #new
-  mutate(binari.more.two.donations = case_when(max.num.donations > 2 ~ "yes",
-                                               max.num.donations <= 2 ~ "no")
+  mutate(binari.more.five.donations = case_when(max.num.donations > 5 ~ "yes",
+                                               max.num.donations <= 5 ~ "no")
   ) %>% 
-  mutate_at(vars(binari.more.two.donations), funs(as.factor)) %>% 
+  mutate_at(vars(binari.more.five.donations), funs(as.factor)) %>% 
   # mutate_at(vars(length, 
   #                recency), funs(as.numeric)) %>% 
   # distinct(donor.no, .keep_all = TRUE) %>% #new
@@ -336,7 +336,9 @@ dataset_ml_2 <- dataset_ml %>%
     binari.regular.giver, ## add eventually to the model
     donor.no,
     count,
-    max.num.donations
+    max.num.donations,
+    frequency,
+    length
     )
   )
 
@@ -357,7 +359,7 @@ dataset_ml_2<- dataset_ml_2[random, ]
 # Separar el training del test set
 set.seed(123)
 ## El sample.split se lo efectua con la variable dependiente
-split<- sample.split(dataset_ml_2$binari.more.two.donations, SplitRatio = 0.8)
+split<- sample.split(dataset_ml_2$binari.more.five.donations, SplitRatio = 0.8)
 
 # Crear los sets de training y test
 training_set<- subset(dataset_ml_2, split == TRUE)
@@ -369,7 +371,7 @@ summary(test_set)
 
 # Create custom indices: myFolds
 ## This is for being able to run different models with the same folds and bein able to compare them (apples with apples)
-myFolds <- createFolds(training_set$binari.more.two.donations, k = 5)
+myFolds <- createFolds(training_set$binari.more.five.donations, k = 5)
 
 
 # If we want to have the ROC index of a binary classification algoritm instead of Accuracy
@@ -424,7 +426,7 @@ tgrid <- expand.grid(
 # )
 
 ## Question: Is a donor making more than two donations?
-classifier <- train(binari.more.two.donations ~.,
+classifier <- train(binari.more.five.donations ~.,
                     data = training_set,
                     metric ="ROC", #THIS HAS TO BE SPECIFIED IF THE MODEL IS NOT "glm"
                     method = "ranger",
@@ -458,7 +460,7 @@ classifier$resample
 # Make a confusion matrix
 ## Type must be "raw"
 y_pred <- predict.train(classifier, test_set, type = "raw")
-confusionMatrix(y_pred, test_set$binari.more.two.donations)
+confusionMatrix(y_pred, test_set$binari.more.five.donations)
 
 
 ############## Model Prediction/Simulation of Random Forest Model ############# 
@@ -551,7 +553,7 @@ confusionMatrix(y_pred, test_set$binari.more.two.donations)
 
 # Question: What makes a donor make more than two donations?
 classifier <- train(
-  binari.more.two.donations ~ .,
+  binari.more.five.donations ~ .,
   data = training_set,
   method = "rpart",
   trControl = my_control,
@@ -565,7 +567,7 @@ classifier <- train(
 # Make a confusion matrix
 ## Check if it's worth take the rules from the model applying rpart instead of ranger
 y_pred <- predict.train(classifier, test_set, type = "raw")
-confusionMatrix(y_pred, test_set$binari.more.two.donations)
+confusionMatrix(y_pred, test_set$binari.more.five.donations)
 
 # Plot decision tree
 rpart.plot(classifier$finalModel)
