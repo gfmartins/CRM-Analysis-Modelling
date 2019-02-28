@@ -152,8 +152,10 @@ dataset_clustered_km <- mutate(dataset_pre_clustering, cluster.assigned = Vector
 ## Include clusters to main dataset with all the data
 dataset_donations <- dataset_donations %>%
   filter(!donor.no %in% c("2640"), 
-         donation.year > 2009) %>% 
+         donation.year > 2009
+         ) %>% 
   left_join(dataset_clustered_km, by = "donor.no") %>% 
+  filter(frequency > 2) %>% 
   # In case some clients were excluded from the clustering, they are assigned as Outliers
   replace_na(list(cluster.assigned = "Outlier")) 
 
@@ -282,14 +284,15 @@ dataset_ml <- dataset_donations %>%
 
 ## This dataset is useful for predicting a donor making more than two donations
 dataset_ml_2 <- dataset_ml %>% 
+  filter(cluster.assigned == "5") %>%
   droplevels() %>% 
   select(donor.no,
-         # frequency,                        
-         # length,
-         # recency,                          
-         # peridiocity,
-         # monetary,                         
-         cluster.assigned,
+         frequency,
+         length,
+         recency,
+         peridiocity,
+         monetary,
+         # cluster.assigned,
          # donation.date,                    
          # donation.amount,
          # development.income, 
@@ -319,7 +322,7 @@ dataset_ml_2 <- dataset_ml %>%
     max.num.donations = max(count)
     ) %>%
   ungroup() %>% 
-  # filter(!binari.regular.giver == "Yes") %>% #new 
+  # filter(!binari.regular.giver == "Yes") %>% #new
   mutate(binari.more.two.donations = case_when(max.num.donations > 2 ~ "yes",
                                                max.num.donations <= 2 ~ "no")
   ) %>% 
@@ -330,14 +333,14 @@ dataset_ml_2 <- dataset_ml %>%
   # na.omit() %>%
   select(-c(
     source, 
-    binari.regular.giver,
+    binari.regular.giver, ## add eventually to the model
     donor.no,
     count,
     max.num.donations
     )
   )
 
-
+summary(dataset_ml_2)
 
 ########## Train the Random Forest model ########## 
 
@@ -347,8 +350,8 @@ dataset_ml_2 <- dataset_ml %>%
 
 # Randomize dataset
 set.seed(234)
-random<- sample(nrow(dataset_ml_2), 5000)
-# random<- sample(nrow(dataset_ml_2))
+# random<- sample(nrow(dataset_ml_2), 5000)
+random<- sample(nrow(dataset_ml_2))
 dataset_ml_2<- dataset_ml_2[random, ]
 
 # Separar el training del test set
