@@ -15,6 +15,8 @@ library(readr)
 library(purrr)
 library(cluster)
 library(magrittr)
+library(corrplot)
+
 
 
 ### THIS SCRIPT INCLUDES THE JUST THE CLUSTERING PROCESS ITSELF WITHOUT ANALYSIS OF NUMBER OF CLUSTERS 
@@ -91,6 +93,9 @@ dataset_pre_clustering <-
   ungroup() %>%
   ## Exclude donors that had less than two visits
   filter(frequency > 2) %>% 
+  ## Convert to numeric this variables, as they are in days
+  mutate_at(vars(length, 
+                 recency), funs(as.numeric)) %>% 
   ## Leave one row per donor
   distinct(donor.no, .keep_all = TRUE) 
 
@@ -101,9 +106,7 @@ dataset_clustering <- dataset_pre_clustering %>%
          recency,
          frequency,
          monetary,
-         peridiocity) %>% 
-  mutate_at(vars(length, 
-                 recency), funs(as.numeric))
+         peridiocity)
 
 
 # Scale the data if neccesary (by preProcess = )
@@ -139,14 +142,14 @@ VectorClusters<- ObjectKM$cluster
 ## Create a new column with the clients and the cluster in which it was assigned
 ## If dataset_pre_clustering was created, use it here
 dataset_clustered_km <- mutate(dataset_pre_clustering, cluster.assigned = VectorClusters) %>% 
-  ## Delete variables that are already in main dataset
+  ## Just select variables that are not in main dataset, to avoid columns .x, .y
   select(donor.no,
          frequency,                      
          length,
          recency,
          peridiocity,                    
          monetary,
-         cluster.assigned)
+         cluster.assigned) 
 
 
 ## Include clusters to main dataset with all the data
@@ -281,10 +284,34 @@ dataset_ml <- dataset_donations %>%
   mutate_if(is.character, as.factor) 
 
 
+# Asses multicolinearity with the corrplot
+## The variable frequency it's the one with most linear correlation (with length and peridiocity)
+## This leads to exclude frequency and length in the model
+## Frequency is obvious as is the response variable, and lenght because of corr with frequency
+dataset_corr<- dataset_ml %>% 
+  select_if(is.numeric) %>% 
+  select(-donation.month,
+         -donation.year,
+         -donation.amount)
+
+## Compute the correlation matrix for these variables
+corrMat<- cor(dataset_corr)
+
+## Plot the corrplot to see what value will be the cutoff
+corrplot(corrMat, method = "ellipse")
+
+# Te output will be the names of columns to eliminate
+findCorrelation(corrMat, cutoff = 0.4, verbose = TRUE, names = TRUE,
+                exact = TRUE)
+
 
 ## This dataset is useful for predicting a donor making more than two donations
 dataset_ml_2 <- dataset_ml %>% 
-  filter(cluster.assigned == "5") %>%
+  filter(cluster.assigned == "4") %>%
+  ## Demostrate that 5 donations is a good value
+  # filter(!cluster.assigned == "5") %>%
+  # hist(dataset_ml_2$frequency, breaks = 66)
+  # summary(dataset_ml_2) ## see first quartile is frequency = 7
   droplevels() %>% 
   select(donor.no,
          frequency,
@@ -337,12 +364,15 @@ dataset_ml_2 <- dataset_ml %>%
     donor.no,
     count,
     max.num.donations,
-    frequency,
-    length
+    frequency, ## too obvious predictor
+    length, ## too much predictor, this might lead to reduce dataset to just 5 years
+    peridiocity, ## good predictor
+    monetary, ## regular good predictor
+    recency
+    
     )
   )
 
-summary(dataset_ml_2)
 
 ########## Train the Random Forest model ########## 
 
@@ -365,8 +395,8 @@ split<- sample.split(dataset_ml_2$binari.more.five.donations, SplitRatio = 0.8)
 training_set<- subset(dataset_ml_2, split == TRUE)
 test_set<- subset(dataset_ml_2, split == FALSE)
 
-summary(training_set)
-summary(test_set)
+# summary(training_set)
+# summary(test_set)
 
 
 # Create custom indices: myFolds
