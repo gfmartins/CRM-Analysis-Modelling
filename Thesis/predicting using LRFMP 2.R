@@ -153,7 +153,7 @@ dataset_clustered_km <- mutate(dataset_pre_clustering, cluster.assigned = Vector
 
 
 ## Include clusters to main dataset with all the data
-dataset_donations <- dataset_donations %>%
+dataset_donations_clustered <- dataset_donations %>%
   filter(!donor.no %in% c("2640"), 
          donation.year > 2009
          ) %>% 
@@ -168,7 +168,7 @@ dataset_donations <- dataset_donations %>%
 
 # Create main ML dataset
 ## This dataset just uses the clusters, not the variables LRFMP
-dataset_ml <- dataset_donations %>%
+dataset_ml <- dataset_donations_clustered %>%
   arrange(donation.date) %>%
   select(
     donor.no,
@@ -180,12 +180,14 @@ dataset_ml <- dataset_donations %>%
     cluster.assigned,
     donation.date,
     donation.amount,
-    development.income,
-    group.name,
+    # development.income,
+    # group.name,
     application,
     payment.type,
     donor.type,
+    nominal,
     source,
+    source.group,
     donor.category,
     closest.retail.store,
     donor.gender,
@@ -264,19 +266,19 @@ dataset_ml <- dataset_donations %>%
   mutate(
     binari.high.value.actual.donation = case_when(donation.amount >= 30 ~ "yes",
                                                   donation.amount <= 30 ~ "no"),
-    class.prev.development.income = lag(development.income),
-    class.prev.group.name = lag(group.name),
+    class.prev.nominal = lag(nominal),
+    class.prev.source.group = lag(source.group),
     class.prev.payment.type = lag(payment.type),
     class.prev.high.value.donation = lag(binari.high.value.actual.donation),
     class.prev.activity.clusters = lag(activity.clusters)
   ) %>%
-  mutate_at(vars(class.prev.development.income:class.prev.payment.type), funs(as.character)) %>% 
+  mutate_at(vars(class.prev.nominal:class.prev.payment.type), funs(as.character)) %>% 
   ungroup() %>%
   # droplevels() %>% 
   replace_na(list(
                   value.previous.donation = "No Previous Donation", 
-                  class.prev.development.income = "No Previous Donation",
-                  class.prev.group.name = "No Previous Donation",
+                  class.prev.nominal = "No Previous Donation",
+                  class.prev.source.group = "No Previous Donation",
                   activity.clusters = "Not Clustered",
                   class.prev.payment.type = "No Previous Donation",
                   class.prev.high.value.donation = "No Previous Donation",
@@ -289,6 +291,8 @@ dataset_ml <- dataset_donations %>%
 ## This leads to exclude frequency and length in the model
 ## Frequency is obvious as is the response variable, and lenght because of corr with frequency
 dataset_corr<- dataset_ml %>% 
+  ## Make the corrplot to every cluster to demostrate that is better to tale out peridiocity
+  filter(cluster.assigned == 1) %>%
   select_if(is.numeric) %>% 
   select(-donation.month,
          -donation.year,
@@ -307,7 +311,7 @@ findCorrelation(corrMat, cutoff = 0.4, verbose = TRUE, names = TRUE,
 
 ## This dataset is useful for predicting a donor making more than two donations
 dataset_ml_2 <- dataset_ml %>% 
-  filter(cluster.assigned == "4") %>%
+  filter(cluster.assigned == "1") %>%
   ## Demostrate that 5 donations is a good value
   # filter(!cluster.assigned == "5") %>%
   # hist(dataset_ml_2$frequency, breaks = 66)
@@ -329,6 +333,7 @@ dataset_ml_2 <- dataset_ml %>%
          # payment.type,
          # donor.type,                       
          source, # It's going to be deleted later
+         source.group,
          # donor.category,                   
          closest.retail.store,
          donor.gender,                     
@@ -337,7 +342,7 @@ dataset_ml_2 <- dataset_ml %>%
          # acquisition.source,
          # binari.high.value.actual.donation,
          # class.prev.development.income,
-         class.prev.group.name,            
+         class.prev.source.group,            
          class.prev.payment.type,
          class.prev.high.value.donation,
          class.prev.activity.clusters) %>% 
@@ -372,6 +377,7 @@ dataset_ml_2 <- dataset_ml %>%
     
     )
   )
+
 
 
 ########## Train the Random Forest model ########## 
@@ -414,6 +420,7 @@ my_control <- trainControl(
   savePredictions = TRUE, # If we are not comparing models after, dont use this
   index = myFolds
 )
+
 
 # Utilize parallel computing for improving speed of processing
 # Calculate the number of cores
