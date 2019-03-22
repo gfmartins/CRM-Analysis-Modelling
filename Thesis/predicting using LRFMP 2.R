@@ -78,14 +78,21 @@ dataset_pre_clustering <-
     length.pre = difftime(last.donation.date,
                           first.donation.date, units = "days"),
     length = mean(length.pre, na.rm = TRUE)
-  ) %>%
+  ) %>% 
   # Calculate Recency
-  ## Measure the difference between donations and "today"
+  mutate(three.last.donations.tag = case_when(count == frequency ~ "Last Donation",
+                                              count == frequency - 1 ~ "Penultimate Donation",
+                                              count == frequency - 2 ~ "Antepenultimate Donation",
+                                              TRUE ~ "Not Recent")
+  ) %>% 
+  ## Measure the difference between donations and "today" between three last donations
   mutate(
-    days.ndonation.to.last.donation = difftime(Sys.Date(),
-                                               donation.date, units = "days"),
-    recency = mean(days.ndonation.to.last.donation, na.rm = TRUE) ## pendant to limit number of recent donations
-  ) %>%
+    days.ndonation.to.today = case_when(three.last.donations.tag %in% c("Last Donation",
+                                                                        "Penultimate Donation",
+                                                                        "Antepenultimate Donation") ~ difftime(Sys.Date(),
+                                                                                                               donation.date, units = "days")),
+    recency = mean(days.ndonation.to.today, na.rm = TRUE) ## pendant to limit number of recent donations
+  ) %>% 
   mutate(
     diff = donation.date - lag(donation.date),
     diff.days = as.numeric(diff, units = 'days'),
