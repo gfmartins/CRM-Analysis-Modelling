@@ -61,6 +61,7 @@ dataset_donations_exploratory <-  dataset_donations %>%
   ## Leave one row per donor
   distinct(donor.no, .keep_all = TRUE) 
 
+
 ## See percentage of donors according to frequency
 dataset_donations_exploratory %>% 
   select(donor.no, frequency) %>% 
@@ -68,10 +69,14 @@ dataset_donations_exploratory %>%
   summarise(donors.per.frequency = n()) %>% 
   ungroup() %>% 
   mutate(total.n = sum(donors.per.frequency),
-         perc = round((donors.per.frequency/total.n) * 100, 2)) 
+         perc = round((donors.per.frequency/total.n) * 100, 2)) %>% 
+  filter(frequency < 15) %>% 
+  ggplot(aes(frequency, perc)) +
+  geom_col()
 
 
-## Sample of the analysis
+## Sample used for the analysis
+# Data filtered by patients that had more than two donations
 dataset_donations_exploratory %>% 
   select(donor.no, frequency) %>% 
   group_by(frequency) %>% 
@@ -79,19 +84,18 @@ dataset_donations_exploratory %>%
   ungroup() %>% 
   mutate(total.n = sum(donors.per.frequency),
          perc = round((donors.per.frequency/total.n) * 100, 2)) %>% 
-  filter(frequency > 1) %>% 
+  filter(frequency > 2) %>% 
   summarise(sample = sum(donors.per.frequency / total.n))
 
-# See % of donors of more than n% donations
-
-dataset_donations_exploratory %>% 
-  select(donor.no, frequency) %>% 
-  filter(frequency > 5) %>% 
-  group_by(frequency) %>% 
-  summarise(donors.per.frequency = n()) %>% 
-  ungroup() %>% 
-  mutate(total.n = sum(donors.per.frequency),
-         perc = round((donors.per.frequency/total.n) * 100, 2)) %>% View()
+# See % of donors of more than n% donations (5 donations)
+# dataset_donations_exploratory %>% 
+#   select(donor.no, frequency) %>% 
+#   filter(frequency > 5) %>% 
+#   group_by(frequency) %>% 
+#   summarise(donors.per.frequency = n()) %>% 
+#   ungroup() %>% 
+#   mutate(total.n = sum(donors.per.frequency),
+#          perc = round((donors.per.frequency/total.n) * 100, 2)) %>% View()
 
 
 # Explore the clusters without main dataset data
@@ -111,9 +115,6 @@ ObjectMeanClusters <- dataset_clustered_km %>%
   summarise_all(funs(round(mean(., na.rm = TRUE))),2) %>% 
   gather(index, mean.value.cluster, -cluster.assigned) 
 
-
-# table
-
 ## Calculate main statistics of LRFMP variables
 ObjectMainStatis <- dataset_pre_clustering %>% 
 select(length,
@@ -131,7 +132,7 @@ summarise_all(funs(max,
   separate(var, c("index", "stat"))
 
 
-# Join mean of all clusters with mean of each cluster
+## Join mean of all clusters with mean of each cluster
 table_mean_comparison <-  ObjectMainStatis %>% 
   filter(stat == "mean") %>% 
   left_join(ObjectMeanClusters, by = "index") %>% 
@@ -141,7 +142,7 @@ table_mean_comparison <-  ObjectMainStatis %>%
          mean.value.general,
          -stat)
 
-
+## PLot
 table_mean_comparison %>% 
   gather(mean.value, value, -index, -cluster.assigned) %>% 
   ggplot(aes(index,
@@ -150,8 +151,8 @@ table_mean_comparison %>%
   facet_grid(. ~ cluster.assigned) +
   theme(axis.text.x=element_text(angle=-45,hjust=0,vjust=1, size=10))
 
-# See how many 
 
+# See how many donors with more than 5 donations there are by cluster
 dataset_ml %>% 
   group_by(donor.no) %>% 
   mutate(
@@ -170,4 +171,138 @@ dataset_ml %>%
   group_by(cluster.assigned) %>% 
   mutate(total.per.cluster = sum(total)) %>%
   mutate(perc = round((total/total.per.cluster) * 100, 2)) %>% 
-  View("grouped clus more five")
+  ggplot(aes(binari.more.five.donations, perc, fill = binari.more.five.donations)) + 
+  geom_col() +
+  facet_grid(. ~ cluster.assigned)
+
+
+# See how many donors per clusters are regular givers
+dataset_ml %>% 
+  # filter(cluster.assigned == "1") %>%
+  ## Demostrate that 5 donations is a good value
+  # filter(!cluster.assigned == "5") %>%
+  # hist(dataset_ml_2$frequency, breaks = 66)
+  # summary(dataset_ml_2) ## see first quartile is frequency = 7
+  droplevels() %>% 
+  select(donor.no,
+         frequency,
+         length,
+         recency,
+         peridiocity,
+         monetary,
+         # cluster.assigned,
+         # donation.date,                    
+         # donation.amount,
+         # development.income, 
+         acquisition.group,
+         # group.name,
+         # application,                      
+         # payment.type,
+         # donor.type,                       
+         source, # It's going to be deleted later
+         source.group,
+         # donor.category,                   
+         closest.retail.store,
+         donor.gender,                     
+         # donation.month,
+         # donation.year,                    
+         # acquisition.source,
+         # binari.high.value.actual.donation,
+         # class.prev.development.income,
+         class.prev.source.group,            
+         class.prev.payment.type,
+         class.prev.high.value.donation,
+         class.prev.activity.clusters, 
+         cluster.assigned) %>% 
+  mutate(binari.regular.giver = ifelse(source %in% c("CAMPOC", "REGGIV","FRIEND", "GIVAYE"), "Yes", "No")
+  ) %>% 
+  group_by(cluster.assigned) %>% 
+  mutate(total.n = n()) %>% 
+  mutate(number.regular.donors.cluster = sum(binari.regular.giver == "Yes")) %>% 
+  ungroup() %>% 
+  mutate(per = round((number.regular.donors.cluster/total.n) * 100, 2)) %>% 
+  distinct(cluster.assigned, .keep_all = TRUE) %>% 
+  select(
+    total.n,
+    number.regular.donors.cluster,
+    per,
+    cluster.assigned
+    ) %>% 
+  ggplot(aes(cluster.assigned, 
+             per, fill = cluster.assigned)) +
+  geom_col()
+
+
+
+# See the percentag of donors per cluster and acquisition group
+dataset_ml %>% 
+  # filter(cluster.assigned == "1") %>%
+  ## Demostrate that 5 donations is a good value
+  # filter(!cluster.assigned == "5") %>%
+  # hist(dataset_ml_2$frequency, breaks = 66)
+  # summary(dataset_ml_2) ## see first quartile is frequency = 7
+  droplevels() %>% 
+  select(donor.no,
+         frequency,
+         length,
+         recency,
+         peridiocity,
+         monetary,
+         # cluster.assigned,
+         # donation.date,                    
+         # donation.amount,
+         # development.income, 
+         acquisition.group,
+         # group.name,
+         # application,                      
+         # payment.type,
+         # donor.type,                       
+         source, # It's going to be deleted later
+         source.group,
+         # donor.category,                   
+         closest.retail.store,
+         donor.gender,                     
+         # donation.month,
+         # donation.year,                    
+         # acquisition.source,
+         # binari.high.value.actual.donation,
+         # class.prev.development.income,
+         class.prev.source.group,            
+         class.prev.payment.type,
+         class.prev.high.value.donation,
+         class.prev.activity.clusters, 
+         cluster.assigned) %>% 
+  distinct(donor.no, .keep_all = TRUE) %>% 
+  group_by(cluster.assigned) %>% 
+  mutate(total.n = n()) %>%
+  ungroup() %>% 
+  group_by(cluster.assigned, acquisition.group) %>% 
+  mutate(number.per.acq.group = n(),
+            per = round((number.per.acq.group/total.n) * 100, 2)) %>% 
+  ungroup() %>% 
+  group_by(cluster.assigned) %>% 
+  distinct(acquisition.group, .keep_all = TRUE) %>% 
+  ungroup() %>% 
+  select(acquisition.group,
+         total.n,
+         number.per.acq.group,
+         per,
+         cluster.assigned
+         ) %>% 
+  group_by(cluster.assigned) %>% 
+  arrange(desc(per)) %>% 
+  mutate(count = sequence(n())) %>% 
+  ungroup() %>% 
+  filter(count <= 5) %>% 
+  droplevels() %>% 
+  arrange(desc(cluster.assigned, per)) %>% 
+  ggplot(aes(acquisition.group,
+             per, fill = acquisition.group)) +
+  geom_col() +
+  facet_grid(. ~ cluster.assigned) +
+  theme(axis.text.x=element_text(angle=-45,hjust=0,vjust=1, size=6))
+  
+  
+  
+  
+ 
