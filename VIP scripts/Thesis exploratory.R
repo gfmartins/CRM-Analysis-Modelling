@@ -62,7 +62,7 @@ dataset_donations_exploratory <-  dataset_donations %>%
   distinct(donor.no, .keep_all = TRUE) 
 
 
-## See percentage of donors according to frequency
+# See percentage of donors according to frequency
 dataset_donations_exploratory %>% 
   select(donor.no, frequency) %>% 
   group_by(frequency) %>% 
@@ -70,9 +70,138 @@ dataset_donations_exploratory %>%
   ungroup() %>% 
   mutate(total.n = sum(donors.per.frequency),
          perc = round((donors.per.frequency/total.n) * 100, 2)) %>% 
+  ## Filter donors that have done less than 15 donations 
   filter(frequency < 15) %>% 
   ggplot(aes(frequency, perc)) +
-  geom_col()
+  geom_col(alpha = 0.8, fill =  "deepskyblue4") +
+  theme_minimal() +
+  scale_fill_economist() +
+  labs(title = "Percentage of Donors by Number of Donations",
+       subtitle = "Majority of donors have done less than three donations",
+       x = "Number of Donations",
+       y = "Percentage (%)") +
+  theme(legend.title = element_blank(),
+        plot.title = element_text(size=15), 
+        plot.subtitle = element_text(size = 12), 
+        text = element_text(family = "Tahoma"), 
+        panel.background = element_rect(fill = "azure1"),
+        plot.background = element_rect(fill = "azure1"), 
+        plot.margin=unit(c(1,1.5,0.5,1.5),"cm")
+  )
+        
+
+# See how many donors with more than 5 donations there are by cluster
+dataset_ml %>% 
+  group_by(donor.no) %>% 
+  mutate(
+    count = sequence(n()),
+    max.num.donations = max(count)
+  ) %>%
+  ungroup() %>% 
+  # filter(!binari.regular.giver == "Yes") %>% #new
+  mutate(binari.more.five.donations = case_when(max.num.donations > 5 ~ "yes",
+                                                max.num.donations <= 5 ~ "no")
+  ) %>% 
+  mutate_at(vars(binari.more.five.donations), funs(as.factor)) %>% 
+  distinct(donor.no, .keep_all = TRUE) %>% 
+  group_by(cluster.assigned, binari.more.five.donations) %>% 
+  summarise(total = n()) %>%
+  group_by(cluster.assigned) %>% 
+  mutate(total.per.cluster = sum(total)) %>%
+  mutate(perc = round((total/total.per.cluster) * 100, 2)) %>% 
+  ggplot(aes(binari.more.five.donations, perc, fill = binari.more.five.donations)) + 
+  geom_col(alpha = 0.8) +
+  facet_grid(. ~ cluster.assigned) +
+  theme_minimal() +
+  scale_fill_economist(labels = c(" < 5 Donations ", " > 5 Donations")) +
+  labs(title = "Percentage by Cluster of Donors with More than 5 Donations",
+       subtitle = "Clusters have donors with different engagement levels",
+       y = "Percentage (%)") +
+  theme(legend.title = element_blank(),
+        legend.position="bottom",
+        axis.title.x = element_blank(),
+        plot.title = element_text(size=15), 
+        plot.subtitle = element_text(size = 12), 
+        text = element_text(family = "Tahoma"), 
+        panel.background = element_rect(fill = "azure1"),
+        plot.background = element_rect(fill = "azure1"), 
+        plot.margin=unit(c(1,1.5,0.5,1.5),"cm")
+  ) 
+
+
+
+# See how many donors per clusters are regular givers
+dataset_ml %>% 
+  # filter(cluster.assigned == "1") %>%
+  ## Demostrate that 5 donations is a good value
+  # filter(!cluster.assigned == "5") %>%
+  # hist(dataset_ml_2$frequency, breaks = 66)
+  # summary(dataset_ml_2) ## see first quartile is frequency = 7
+  droplevels() %>% 
+  select(donor.no,
+         frequency,
+         length,
+         recency,
+         peridiocity,
+         monetary,
+         # cluster.assigned,
+         # donation.date,                    
+         # donation.amount,
+         # development.income, 
+         acquisition.group,
+         # group.name,
+         # application,                      
+         # payment.type,
+         # donor.type,                       
+         source, # It's going to be deleted later
+         source.group,
+         # donor.category,                   
+         closest.retail.store,
+         donor.gender,                     
+         # donation.month,
+         # donation.year,                    
+         # acquisition.source,
+         # binari.high.value.actual.donation,
+         # class.prev.development.income,
+         class.prev.source.group,            
+         class.prev.payment.type,
+         class.prev.high.value.donation,
+         class.prev.activity.clusters, 
+         cluster.assigned) %>% 
+  mutate(binari.regular.giver = ifelse(source %in% c("CAMPOC", "REGGIV","FRIEND", "GIVAYE"), "Yes", "No")
+  ) %>% 
+  group_by(cluster.assigned) %>% 
+  mutate(total.n = n()) %>% 
+  mutate(number.regular.donors.cluster = sum(binari.regular.giver == "Yes")) %>% 
+  ungroup() %>% 
+  mutate(per = round((number.regular.donors.cluster/total.n) * 100, 2)) %>% 
+  distinct(cluster.assigned, .keep_all = TRUE) %>% 
+  select(
+    total.n,
+    number.regular.donors.cluster,
+    per,
+    cluster.assigned
+  ) %>% 
+  ggplot(aes(cluster.assigned, 
+             per, fill = cluster.assigned)) +
+  geom_col(alpha = 0.8) +
+  theme_minimal() +
+  scale_fill_economist() +
+  labs(title = "Percentage of Regular Giver by Cluster",
+       subtitle = "All clusters have at least a small number of Regular Givers",
+       y = "Percentage (%)",
+       x = "Cluster") +
+  theme(legend.title = element_blank(),
+        legend.position="none",
+        plot.title = element_text(size=15), 
+        plot.subtitle = element_text(size = 12), 
+        text = element_text(family = "Tahoma"), 
+        panel.background = element_rect(fill = "azure1"),
+        plot.background = element_rect(fill = "azure1"), 
+        plot.margin=unit(c(1,1.5,0.5,1.5),"cm")
+  ) 
+
+
 
 
 ## Sample used for the analysis
@@ -142,99 +271,9 @@ table_mean_comparison <-  ObjectMainStatis %>%
          mean.value.general,
          -stat)
 
-## PLot
-table_mean_comparison %>% 
-  gather(mean.value, value, -index, -cluster.assigned) %>% 
-  ggplot(aes(index,
-             log(value), fill = mean.value)) +
-  geom_col(width = 0.7, position = "dodge") + 
-  facet_grid(. ~ cluster.assigned) +
-  theme(axis.text.x=element_text(angle=-45,hjust=0,vjust=1, size=10))
 
 
-# See how many donors with more than 5 donations there are by cluster
-dataset_ml %>% 
-  group_by(donor.no) %>% 
-  mutate(
-    count = sequence(n()),
-    max.num.donations = max(count)
-  ) %>%
-  ungroup() %>% 
-  # filter(!binari.regular.giver == "Yes") %>% #new
-  mutate(binari.more.five.donations = case_when(max.num.donations > 5 ~ "yes",
-                                                max.num.donations <= 5 ~ "no")
-  ) %>% 
-  mutate_at(vars(binari.more.five.donations), funs(as.factor)) %>% 
-  distinct(donor.no, .keep_all = TRUE) %>% 
-  group_by(cluster.assigned, binari.more.five.donations) %>% 
-  summarise(total = n()) %>%
-  group_by(cluster.assigned) %>% 
-  mutate(total.per.cluster = sum(total)) %>%
-  mutate(perc = round((total/total.per.cluster) * 100, 2)) %>% 
-  ggplot(aes(binari.more.five.donations, perc, fill = binari.more.five.donations)) + 
-  geom_col() +
-  facet_grid(. ~ cluster.assigned)
-
-
-# See how many donors per clusters are regular givers
-dataset_ml %>% 
-  # filter(cluster.assigned == "1") %>%
-  ## Demostrate that 5 donations is a good value
-  # filter(!cluster.assigned == "5") %>%
-  # hist(dataset_ml_2$frequency, breaks = 66)
-  # summary(dataset_ml_2) ## see first quartile is frequency = 7
-  droplevels() %>% 
-  select(donor.no,
-         frequency,
-         length,
-         recency,
-         peridiocity,
-         monetary,
-         # cluster.assigned,
-         # donation.date,                    
-         # donation.amount,
-         # development.income, 
-         acquisition.group,
-         # group.name,
-         # application,                      
-         # payment.type,
-         # donor.type,                       
-         source, # It's going to be deleted later
-         source.group,
-         # donor.category,                   
-         closest.retail.store,
-         donor.gender,                     
-         # donation.month,
-         # donation.year,                    
-         # acquisition.source,
-         # binari.high.value.actual.donation,
-         # class.prev.development.income,
-         class.prev.source.group,            
-         class.prev.payment.type,
-         class.prev.high.value.donation,
-         class.prev.activity.clusters, 
-         cluster.assigned) %>% 
-  mutate(binari.regular.giver = ifelse(source %in% c("CAMPOC", "REGGIV","FRIEND", "GIVAYE"), "Yes", "No")
-  ) %>% 
-  group_by(cluster.assigned) %>% 
-  mutate(total.n = n()) %>% 
-  mutate(number.regular.donors.cluster = sum(binari.regular.giver == "Yes")) %>% 
-  ungroup() %>% 
-  mutate(per = round((number.regular.donors.cluster/total.n) * 100, 2)) %>% 
-  distinct(cluster.assigned, .keep_all = TRUE) %>% 
-  select(
-    total.n,
-    number.regular.donors.cluster,
-    per,
-    cluster.assigned
-    ) %>% 
-  ggplot(aes(cluster.assigned, 
-             per, fill = cluster.assigned)) +
-  geom_col()
-
-
-
-# See the percentag of donors per cluster and acquisition group
+# See the percentag of donors per cluster and acquisition group (top 3)
 dataset_ml %>% 
   # filter(cluster.assigned == "1") %>%
   ## Demostrate that 5 donations is a good value
@@ -278,7 +317,7 @@ dataset_ml %>%
   ungroup() %>% 
   group_by(cluster.assigned, acquisition.group) %>% 
   mutate(number.per.acq.group = n(),
-            per = round((number.per.acq.group/total.n) * 100, 2)) %>% 
+         per = round((number.per.acq.group/total.n) * 100, 2)) %>% 
   ungroup() %>% 
   group_by(cluster.assigned) %>% 
   distinct(acquisition.group, .keep_all = TRUE) %>% 
@@ -288,19 +327,65 @@ dataset_ml %>%
          number.per.acq.group,
          per,
          cluster.assigned
-         ) %>% 
+  ) %>% 
   group_by(cluster.assigned) %>% 
   arrange(desc(per)) %>% 
   mutate(count = sequence(n())) %>% 
   ungroup() %>% 
-  filter(count <= 5) %>% 
+  filter(count <= 3) %>% 
   droplevels() %>% 
   arrange(desc(cluster.assigned, per)) %>% 
   ggplot(aes(acquisition.group,
              per, fill = acquisition.group)) +
-  geom_col() +
+  geom_col(alpha = 0.8) +
   facet_grid(. ~ cluster.assigned) +
-  theme(axis.text.x=element_text(angle=-45,hjust=0,vjust=1, size=6))
+  theme_minimal() +
+  scale_fill_economist() +
+  labs(title = "Top Three of Donor's Acquisition Group by Cluster",
+       subtitle = "Some acquisition groups are present on every cluster",
+       y = "Percentage (%)",
+       x = "Cluster") +
+  theme(legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        legend.position="none",
+        plot.title = element_text(size=15), 
+        plot.subtitle = element_text(size = 12), 
+        text = element_text(family = "Tahoma"),
+        axis.text.x=element_text(angle=-45,hjust=0,vjust=1, size=6),
+        panel.background = element_rect(fill = "azure1"),
+        plot.background = element_rect(fill = "azure1"), 
+        plot.margin=unit(c(1,1.5,0.5,1.5),"cm")
+  ) 
+
+
+
+## Plot of mean value of each cluster vs mean of general data
+table_mean_comparison %>% 
+  gather(mean.value, value, -index, -cluster.assigned) %>% 
+  ggplot(aes(index,
+             log(value), fill = mean.value)) +
+  geom_col(width = 0.7, position = "dodge", alpha = 0.8) + 
+  facet_grid(. ~ cluster.assigned) +
+  theme_minimal() +
+  scale_fill_economist(labels = c("Cluster", "General")) +
+  labs(title = "Comparison of Clusters' Average LRFM Values vs All Donors",
+       subtitle = "Donors on each cluster have different behaviors",
+       y = "Average Values (log)") +
+  theme(legend.title = element_blank(),
+        legend.position="bottom",
+        axis.title.x = element_blank(),
+        plot.title = element_text(size=15), 
+        plot.subtitle = element_text(size = 12), 
+        text = element_text(family = "Tahoma"), 
+        panel.background = element_rect(fill = "azure1"),
+        plot.background = element_rect(fill = "azure1"), 
+        plot.margin=unit(c(1,1.5,0.5,1.5),"cm"),
+        axis.text.x=element_text(angle=-45,hjust=0,vjust=1, size=10)
+        ) 
+
+
+
+
   
   
   
