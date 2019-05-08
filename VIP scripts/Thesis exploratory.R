@@ -43,7 +43,7 @@ dataset_donations_exploratory <-  dataset_donations %>%
   mutate(
     days.ndonation.to.last.donation = difftime(Sys.Date(),
                                                donation.date, units = "days"),
-    recency = mean(days.ndonation.to.last.donation, na.rm = TRUE) ## pendant to limit number of recent donations
+    recency = mean(days.ndonation.to.last.donation, na.rm = TRUE) 
   ) %>%
   mutate(
     diff = donation.date - lag(donation.date),
@@ -206,7 +206,7 @@ dataset_ml %>%
 
 ## Sample used for the analysis
 # Data filtered by patients that had more than two donations
-dataset_donations_exploratory %>% 
+ObjectPerSample <- dataset_donations_exploratory %>% 
   select(donor.no, frequency) %>% 
   group_by(frequency) %>% 
   summarise(donors.per.frequency = n()) %>% 
@@ -214,7 +214,21 @@ dataset_donations_exploratory %>%
   mutate(total.n = sum(donors.per.frequency),
          perc = round((donors.per.frequency/total.n) * 100, 2)) %>% 
   filter(frequency > 2) %>% 
-  summarise(sample = sum(donors.per.frequency / total.n))
+  summarise(sample = sum(donors.per.frequency / total.n) *100) %$% 
+  return(sample)
+
+
+ObjectNumSample <- dataset_donations_exploratory %>% 
+  select(donor.no, frequency) %>% 
+  group_by(frequency) %>% 
+  summarise(donors.per.frequency = n()) %>% 
+  ungroup() %>% 
+  mutate(total.n = sum(donors.per.frequency),
+         perc = round((donors.per.frequency/total.n) * 100, 2)) %>% 
+  filter(frequency > 2) %>% 
+  summarise(sample = sum(donors.per.frequency)) %$% 
+  return(sample)
+
 
 # See % of donors of more than n% donations (5 donations)
 # dataset_donations_exploratory %>% 
@@ -225,51 +239,6 @@ dataset_donations_exploratory %>%
 #   ungroup() %>% 
 #   mutate(total.n = sum(donors.per.frequency),
 #          perc = round((donors.per.frequency/total.n) * 100, 2)) %>% View()
-
-
-# Explore the clusters without main dataset data
-## Calculate summary statistics for each category (e.g. mean())
-## data_set_clustered_ depends on what type of cluster is being analized (in this case KM) 
-ObjectMeanClusters <- dataset_clustered_km %>% 
-  select(
-    cluster.assigned,
-    length,
-    recency,
-    frequency,
-    monetary,
-    peridiocity
-  ) %>% 
-  group_by(cluster.assigned) %>% 
-  mutate(count.per.cluster = n()) %>% 
-  summarise_all(funs(round(mean(., na.rm = TRUE))),2) %>% 
-  gather(index, mean.value.cluster, -cluster.assigned) 
-
-## Calculate main statistics of LRFMP variables
-ObjectMainStatis <- dataset_pre_clustering %>% 
-select(length,
-       recency,
-       frequency,
-       monetary,
-       peridiocity) %>% 
-mutate_at(vars(length, 
-               recency), funs(as.numeric)) %>% 
-summarise_all(funs(max, 
-                   min,
-                   mean,
-                   sd)) %>% 
-  gather(var, mean.value.general) %>% 
-  separate(var, c("index", "stat"))
-
-
-## Join mean of all clusters with mean of each cluster
-table_mean_comparison <-  ObjectMainStatis %>% 
-  filter(stat == "mean") %>% 
-  left_join(ObjectMeanClusters, by = "index") %>% 
-  select(index,
-         cluster.assigned,
-         mean.value.cluster,
-         mean.value.general,
-         -stat)
 
 
 
@@ -332,7 +301,8 @@ dataset_ml %>%
   arrange(desc(per)) %>% 
   mutate(count = sequence(n())) %>% 
   ungroup() %>% 
-  filter(count <= 3) %>% 
+  filter(count <= 3) %>%
+  # filter(cluster.assigned == 3) %>%
   droplevels() %>% 
   arrange(desc(cluster.assigned, per)) %>% 
   ggplot(aes(acquisition.group,
@@ -358,6 +328,50 @@ dataset_ml %>%
   ) 
 
 
+
+# Explore the clusters without main dataset data
+## Calculate summary statistics for each category (e.g. mean())
+## data_set_clustered_ depends on what type of cluster is being analized (in this case KM) 
+ObjectMeanClusters <- dataset_clustered_km %>% 
+  select(
+    cluster.assigned,
+    length,
+    recency,
+    frequency,
+    monetary,
+    peridiocity
+  ) %>% 
+  group_by(cluster.assigned) %>% 
+  mutate(count.per.cluster = n()) %>% 
+  summarise_all(funs(round(mean(., na.rm = TRUE))),2) %>% 
+  gather(index, mean.value.cluster, -cluster.assigned) 
+
+## Calculate main statistics of LRFMP variables
+ObjectMainStatis <- dataset_pre_clustering %>% 
+  select(length,
+         recency,
+         frequency,
+         monetary,
+         peridiocity) %>% 
+  mutate_at(vars(length, 
+                 recency), funs(as.numeric)) %>% 
+  summarise_all(funs(max, 
+                     min,
+                     mean,
+                     sd)) %>% 
+  gather(var, mean.value.general) %>% 
+  separate(var, c("index", "stat"))
+
+
+## Join mean of all clusters with mean of each cluster
+table_mean_comparison <-  ObjectMainStatis %>% 
+  filter(stat == "mean") %>% 
+  left_join(ObjectMeanClusters, by = "index") %>% 
+  select(index,
+         cluster.assigned,
+         mean.value.cluster,
+         mean.value.general,
+         -stat)
 
 ## Plot of mean value of each cluster vs mean of general data
 table_mean_comparison %>% 

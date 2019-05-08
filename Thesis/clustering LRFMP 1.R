@@ -14,6 +14,8 @@ library(rpart.plot)
 library(readr)
 library(purrr)
 library(cluster)
+library(dbscan)
+
 
 
 ### THIS SCRIPT INCLUDES THE CLUSTERING PROCESS FROM ANALYSIS OF NUMBER OF CLUSTERS TO THE CLUSTERING ITSELF
@@ -179,8 +181,24 @@ table_silhouette <- data.frame(
 
 ## Plot 
 ggplot(table_silhouette, aes(x = k, y = sil_width)) +
-  geom_line() +
-  scale_x_continuous(breaks = 2:10)
+  geom_col(fill = "deepskyblue4", alpha = 0.8) +
+  theme_minimal() +
+  scale_fill_economist() +
+  labs(title = "Silhouette Index per Different K Values",
+       subtitle = "K = 5 has the highest Silhouette width",
+       x = "K value",
+       y = "Silhouette Index") +
+  theme(legend.title = element_blank(),
+        plot.title = element_text(size=15), 
+        plot.subtitle = element_text(size = 12), 
+        panel.background = element_rect(fill = "white"),
+        plot.background = element_rect(fill = "white"), 
+        plot.margin=unit(c(1,1.5,0.5,1.5),"cm")
+        ) +
+  scale_x_continuous(breaks = 2:10) +
+  annotate("rect", xmin = 4.55, xmax = 5.45, ymin = 0, ymax = 0.423, fill = "darkorange1", alpha = .6, color = NA) 
+
+
 
 
 ### Applying k-means to the dataset
@@ -200,18 +218,28 @@ dataset_clustered_km <- mutate(dataset_pre_clustering, cluster.assigned = Vector
 # Visualize the clusters
 ## Option1
 ## lines = 0 es porque no queremos que se grafiquen lineas de distancia, shade = true (parametro fijo), color = parametro fijo, labels = 5 (para tener todo en el grafico es 2), plotchar = parametro fijo, span = parametro fijo) 
-library(cluster)
-clusplot(dataset_clustering,
-         VectorClusters,
-         lines = 0,
-         shade = TRUE,
-         color = TRUE,
-         labels = 5,
-         plotchar = FALSE,
-         span = TRUE,
-         main = paste("Clusters of "),
-         xlab = "COLUMN1",
-         ylab = "COLUMN2")
+# library(cluster)
+# clusplot(dataset_clustering,
+#          VectorClusters,
+#          lines = 0,
+#          shade = TRUE,
+#          color = TRUE,
+#          labels = 5,
+#          plotchar = FALSE,
+#          span = TRUE,
+#          main = paste("Clusters of "),
+#          xlab = "COLUMN1",
+#          ylab = "COLUMN2")
+
+fviz_cluster(ObjectKM, 
+             dataset_clustering,
+             palette = c("#a6dbed","#0099CC", "#99E6FF", "#99c2d6", "#6e6e9e"),
+             alpha = 0.8,
+             ggtheme = theme_minimal(),
+             main = "Partitioning Clustering Plot"
+             ) +
+  labs(title = "Clusters of LRFMP Variables in a Two-Dimensional Space",
+       subtitle = "Principal Components were used to reduce dimensions")
 
 # Explore the clusters without main dataset data
 ## Calculate summary statistics for each category (e.g. mean())
@@ -232,13 +260,14 @@ dataset_clustered_km %>%
 
 
 ## Include clusters to main dataset with all the data
-dataset_donations <- dataset_donations %>% 
+dataset_donations_clustered <- dataset_donations %>%
   filter(!donor.no %in% c("2640"), 
-         donation.year > 2009) %>% 
+         donation.year > 2009
+  ) %>% 
   left_join(dataset_clustered_km, by = "donor.no") %>% 
+  filter(frequency > 2) %>% 
   # In case some clients were excluded from the clustering, they are assigned as Outliers
-  replace_na(list(cluster.assigned = "Outlier")) %>% 
-  select(-c(length.pre, diff, diff.days))
+  replace_na(list(cluster.assigned = "Outlier")) 
   
 
 ###### Third part: DBSCAN Clustering ###### 

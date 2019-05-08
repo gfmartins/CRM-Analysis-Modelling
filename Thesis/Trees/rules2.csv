@@ -1,0 +1,3 @@
+.outcome,,,,,  cover
+0.41,when,acquisition.groupTRU,is,1,  0%
+0.99,when,acquisition.groupTRU,is,0,100%
